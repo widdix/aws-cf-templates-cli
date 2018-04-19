@@ -1,0 +1,22 @@
+widdix CloudFormation CLI
+
+Usage:
+  widdix catalogue [--debug]
+  widdix create [--template-id=<templateid>] [--stack-name=<stackname>] [--parameter=<key=value>...] [--debug]
+  widdix delete --stack-name=<stackname> [--debug]
+  widdix update [--stack-name=<stackname>] [--region=<region>] [--yes] [--debug]
+  widdix get --stack-name=<stackname> [--debug]
+  widdix list [--region=<region>] [--debug]
+  widdix graph [--region=<region>] [--debug]
+  widdix -h | --help
+  widdix --version
+
+Options:
+  -t <templateid>, --template-id=<templateid>     ID of the template.
+  -s <stackname>, --stack-name=<stackname>        Name of the CloudFormation stack.
+  -r <region>, --region=<region>                  Region, e.g. us-east-1 (all regions if not specified).
+  -p <key=value>, --parameter=<key=value>         Format ParameterKey=ParameterValue.
+  -y, --yes                                       Answer all questions with yes.
+  -d, --debug                                     Print debug information.
+  -h, --help                                      Show help.
+  -v, --version                                   Show version.
