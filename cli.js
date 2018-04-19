@@ -135,14 +135,21 @@ const fetchRegions = (region) => {
   }
 };
 
-const enrichStack = async (templateId, templateVersion, stack) => {
+const enrichStack = async (stdconsole, templateId, templateVersion, stack) => {
   const isUpdateAvailable = (latestVersion, templateVersion) => {
     if (templateVersion === undefined) { // unreleased version, from git repo directly
       return undefined;
     }
     return semver.gt(latestVersion, templateVersion);
   };
-  const latestVersion = await fetchLatestTemplateVersion();
+  const latestVersion = await fetchLatestTemplateVersion().catch(e => {
+    stdconsole.error('can not get latest version', e);
+    return undefined;
+  });
+  const templateDrift = await detectTemplateDrift(stack.Region, stack.StackName, templateId, templateVersion).catch(e => {
+    stdconsole.error(`can not get detect template drift in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
+    return undefined;
+  });
   return {
     region: stack.Region,
     name: stack.StackName,
@@ -152,13 +159,13 @@ const enrichStack = async (templateId, templateVersion, stack) => {
     }, {}),
     templateId,
     templateVersion,
-    templateDrift: await detectTemplateDrift(stack.Region, stack.StackName, templateId, templateVersion),
+    templateDrift: templateDrift,
     templateLatestVersion: latestVersion,
     templateUpdateAvailable: isUpdateAvailable(latestVersion, templateVersion)
   };
 };
 
-const fetchAllStacks = (region) => {
+const fetchAllStacks = (stdconsole, region) => {
   return fetchRegions(region)
     .then(regions => Promise.all(regions.map(region => fetchStacks(region))))
     .then(stackLists => {
@@ -171,7 +178,7 @@ const fetchAllStacks = (region) => {
           .map((stack) => {
             const templateId = extractTemplateIDFromStack(stack);
             const templateVersion = extractTemplateVersionFromStack(stack);
-            return enrichStack(templateId, templateVersion, stack);
+            return enrichStack(stdconsole, templateId, templateVersion, stack);
           })
       );
     });
@@ -346,7 +353,7 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
 
   try {
     if (input.list === true) {
-      const stacks = await fetchAllStacks(input['--region']);
+      const stacks = await fetchAllStacks(stdconsole, input['--region']);
       const rows = stacks.map((stack) => {
         const row = [stack.region, stack.name, stack.templateId];
         if (stack.templateUpdateAvailable === true) {
@@ -362,7 +369,7 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
       const intelligentLabelShortening = (label) => {
         return truncate(label, 12, 12, '...');
       };
-      const stacks = await fetchAllStacks(input['--region']);
+      const stacks = await fetchAllStacks(stdconsole, input['--region']);
       const groot = graphlib.create('root', `widdix ${require('./package.json').version}`);
       stacks.forEach(stack => {
         const g = groot.subgraph(stack.region, stack.region);
@@ -390,7 +397,7 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
     } else if (input.update === true) {
       const relevantStacks = async () => {
         if (input['--stack-name'] !== null) {
-          const allStacks = await fetchAllStacks(input['--region']);
+          const allStacks = await fetchAllStacks(stdconsole, input['--region']);
           const stacks = allStacks.filter(stack => stack.name === input['--stack-name']);
           if (stacks.length === 0) {
             throw new Error(`no stack found with name ${input['--stack-name']}`);
@@ -399,7 +406,7 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
           } 
           return stacks;
         } else {
-          const stacks = await fetchAllStacks(input['--region']); // TODO we also have to take account the dependencies, so better use what tree outputs
+          const stacks = await fetchAllStacks(stdconsole, input['--region']); // TODO we also have to take account the dependencies, so better use what tree outputs
           return stacks;
         }
       };
