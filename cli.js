@@ -36,9 +36,8 @@ const detectTemplateDrift = async (stackRegion, stackName, templateId, templateV
     const liveTemplate = await cloudformation.getTemplate({
       StackName: stackName
     }).promise();
-    /* eslint-disable no-control-regex */
-    const rawMd5 = md5(rawTemplate.replace(/[^\x00-\x7F]/g, '?')); // CloudFormation replaces non-ascii chars with ?
-    /* eslint-enable no-control-regex */
+    // CloudFormation replaces non-ascii chars with ? 
+    const rawMd5 = md5(rawTemplate.replace(/[^\x00-\x7F]/g, '?')); // eslint-disable-line no-control-regex 
     const liveMd5 = md5(liveTemplate.TemplateBody);
     return rawMd5 !== liveMd5;
   }
