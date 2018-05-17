@@ -19,9 +19,11 @@
     "stdio-mock": "1.1.0"
   },
   "scripts": {
-    "test": "eslint . && mocha test/*.js"
+    "test": "eslint . && mocha test/*.js",
+    "package": "pkg package.json --targets node8-linux-x64,node8-macos-x64,node8-win-x64"
   },
   "bin": "cli.js",
+  "bin": "index.js",
   "pkg": {
     "assets": "cli.tx"
   }
