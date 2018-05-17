@@ -5,6 +5,66 @@ const assert = require('assert');
 const graph = require('../lib/graph.js');
 
 describe('graph', () => {
+  describe('sort', () => {
+    it('empty graph', () => {
+      const g = graph.create('id', 'test');
+      assert.deepStrictEqual(g.sort(), []);
+    });
+    it('one node, no connections', () => {
+      const g = graph.create('id', 'test');
+      g.create('n1', 'test1', 1);
+      assert.deepStrictEqual(g.sort().map(n => n.id()), ['n1']);
+    });
+    it('two nodes, no connections', () => {
+      const g = graph.create('id', 'test');
+      g.create('n1', 'test1', 1);
+      g.create('n2', 'test2', 2);
+      assert.deepStrictEqual(g.sort().map(n => n.id()), ['n1', 'n2']);
+    });
+    it('two nodes, single connection', () => {
+      const g = graph.create('id', 'test');
+      const n1 = g.create('n1', 'test1', 1);
+      const n2 = g.create('n2', 'test2', 2);
+      n1.connect(n2);
+      assert.deepStrictEqual(g.sort().map(n => n.id()), ['n2', 'n1']);
+    });
+    it('two nodes, cyclic connection, no start nodes', () => {
+      const g = graph.create('id', 'test');
+      const n1 = g.create('n1', 'test1', 1);
+      const n2 = g.create('n2', 'test2', 2);
+      n1.connect(n2);
+      n2.connect(n1);
+      assert.throws(() => g.sort().map(n => n.id()), /^Error: no start nodes found$/);
+    });
+    it('three nodes, cyclic connection', () => {
+      const g = graph.create('id', 'test');
+      const n1 = g.create('n1', 'test1', 1);
+      const n2 = g.create('n2', 'test2', 2);
+      g.create('n3', 'test3', 3);
+      n1.connect(n2);
+      n2.connect(n1);
+      assert.throws(() => g.sort().map(n => n.id()), /^Error: cyclic connections found$/);
+    });
+    it('three nodes, single connection', () => {
+      const g = graph.create('id', 'test');
+      const n1 = g.create('n1', 'test1', 1);
+      const n2 = g.create('n2', 'test2', 2);
+      const n3 = g.create('n3', 'test2', 3);
+      n1.connect(n2);
+      n2.connect(n3);
+      assert.deepStrictEqual(g.sort().map(n => n.id()), ['n3', 'n2', 'n1']);
+    });
+    it('three nodes, multiple connections', () => {
+      const g = graph.create('id', 'test');
+      const n1 = g.create('n1', 'test1', 1);
+      const n2 = g.create('n2', 'test2', 2);
+      const n3 = g.create('n3', 'test2', 3);
+      n1.connect(n2);
+      n1.connect(n3);
+      n2.connect(n3);
+      assert.deepStrictEqual(g.sort().map(n => n.id()), ['n3', 'n2', 'n1']);
+    });
+  });
   describe('find', () => {
     it('empty graph', () => {
       const g = graph.create('id', 'test');

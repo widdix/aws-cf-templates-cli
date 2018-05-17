@@ -402,14 +402,31 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
             throw new Error(`no stack found with name ${input['--stack-name']}`);
           } else if (stacks.length > 1) {
             throw new Error(`more then one stack found with name ${input['--stack-name']}. Set the --region parameter to restrict to a single region.`);
-          } 
+          }
           return stacks;
         } else {
-          const stacks = await fetchAllStacks(stdconsole, input['--region']); // TODO we also have to take account the dependencies, so better use what tree outputs
+          const stacks = await fetchAllStacks(stdconsole, input['--region']);
           return stacks;
         }
       };
-      const updateableStacks = (await relevantStacks()).filter(stack => stack.templateUpdateAvailable === true);
+      const updateableStacksRandomOrder = (await relevantStacks()).filter(stack => stack.templateUpdateAvailable === true);
+      const g = graphlib.create('root', `widdix ${require('./package.json').version}`);
+      updateableStacksRandomOrder.forEach(stack => {
+        const id = `${stack.region}:${stack.name}`;
+        g.create(id, id, stack);
+      });
+      updateableStacksRandomOrder.forEach(stack => {
+        const node = g.find(`${stack.region}:${stack.name}`);
+        Object.keys(stack.parameters)
+          .filter(key => key.startsWith('Parent'))
+          .forEach(key => {
+            const parentStackName = stack.parameters[key];
+            if (parentStackName !== '') {
+              g.find(`${stack.region}:${parentStackName}`).connect(node);
+            }
+          });
+      });
+      const updateableStacks = g.sort().map(node => node.data()); // start with the stacks that have no dependencies
       if (updateableStacks.length == 0) {
         throw new Error('no update available');
       }
