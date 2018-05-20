@@ -361,128 +361,128 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
     region: 'us-east-1'
   });
 
-    if (input.list === true) {
-      const stacks = await fetchAllStacks(stdconsole, input['--region']);
-      const rows = stacks.map((stack) => {
-        const row = [stack.region, stack.name, stack.templateId];
-        if (stack.templateUpdateAvailable === true) {
-          row.push(`${stack.templateVersion} (latest ${stack.templateLatestVersion})`);
-        } else {
-          row.push(stack.templateVersion);
-        }
-        row.push(stack.templateDrift);
-        return row;
-      });
-      tablelib.print(stdconsole, stdout.columns, ['Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Template Drift'], rows);
-    } else if (input.graph === true) {
-      const intelligentLabelShortening = (label) => {
-        return truncate(label, 12, 12, '...');
-      };
-      const stacks = await fetchAllStacks(stdconsole, input['--region']);
-      const groot = graphlib.create('root', `widdix ${require('./package.json').version}`);
-      stacks.forEach(stack => {
-        const g = groot.subgraph(stack.region, stack.region);
-        let label = `${stack.templateId}\n${intelligentLabelShortening(stack.name)}\n`;
-        if (stack.templateUpdateAvailable === true) {
-          label += `${stack.templateVersion} (latest ${stack.templateLatestVersion})`;
-        } else {
-          label += stack.templateVersion;
-        }
-        g.create(`${stack.region}:${stack.name}`, label, stack);
-      });
-      stacks.forEach(stack => {
-        const g = groot.subgraph(stack.region, stack.region);
-        const node = g.find(`${stack.region}:${stack.name}`);
-        Object.keys(stack.parameters)
-          .filter(key => key.startsWith('Parent'))
-          .forEach(key => {
-            const parentStackName = stack.parameters[key];
-            if (parentStackName !== '') {
-              g.find(`${stack.region}:${parentStackName}`).connect(node);
-            }
-          });
-      });
-      stdconsole.log(groot.toDOT());
-    } else if (input.update === true) {
-      const relevantStacks = async () => {
-        if (input['--stack-name'] !== null) {
-          const allStacks = await fetchAllStacks(stdconsole, input['--region']);
-          const stacks = allStacks.filter(stack => stack.name === input['--stack-name']);
-          if (stacks.length === 0) {
-            throw new Error(`no stack found with name ${input['--stack-name']}`);
-          } else if (stacks.length > 1) {
-            throw new Error(`more then one stack found with name ${input['--stack-name']}. Set the --region parameter to restrict to a single region.`);
+  if (input.list === true) {
+    const stacks = await fetchAllStacks(stdconsole, input['--region']);
+    const rows = stacks.map((stack) => {
+      const row = [stack.region, stack.name, stack.templateId];
+      if (stack.templateUpdateAvailable === true) {
+        row.push(`${stack.templateVersion} (latest ${stack.templateLatestVersion})`);
+      } else {
+        row.push(stack.templateVersion);
+      }
+      row.push(stack.templateDrift);
+      return row;
+    });
+    tablelib.print(stdconsole, stdout.columns, ['Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Template Drift'], rows);
+  } else if (input.graph === true) {
+    const intelligentLabelShortening = (label) => {
+      return truncate(label, 12, 12, '...');
+    };
+    const stacks = await fetchAllStacks(stdconsole, input['--region']);
+    const groot = graphlib.create('root', `widdix ${require('./package.json').version}`);
+    stacks.forEach(stack => {
+      const g = groot.subgraph(stack.region, stack.region);
+      let label = `${stack.templateId}\n${intelligentLabelShortening(stack.name)}\n`;
+      if (stack.templateUpdateAvailable === true) {
+        label += `${stack.templateVersion} (latest ${stack.templateLatestVersion})`;
+      } else {
+        label += stack.templateVersion;
+      }
+      g.create(`${stack.region}:${stack.name}`, label, stack);
+    });
+    stacks.forEach(stack => {
+      const g = groot.subgraph(stack.region, stack.region);
+      const node = g.find(`${stack.region}:${stack.name}`);
+      Object.keys(stack.parameters)
+        .filter(key => key.startsWith('Parent'))
+        .forEach(key => {
+          const parentStackName = stack.parameters[key];
+          if (parentStackName !== '') {
+            g.find(`${stack.region}:${parentStackName}`).connect(node);
           }
-          return stacks;
-        } else {
-          const stacks = await fetchAllStacks(stdconsole, input['--region']);
-          return stacks;
+        });
+    });
+    stdconsole.log(groot.toDOT());
+  } else if (input.update === true) {
+    const relevantStacks = async () => {
+      if (input['--stack-name'] !== null) {
+        const allStacks = await fetchAllStacks(stdconsole, input['--region']);
+        const stacks = allStacks.filter(stack => stack.name === input['--stack-name']);
+        if (stacks.length === 0) {
+          throw new Error(`no stack found with name ${input['--stack-name']}`);
+        } else if (stacks.length > 1) {
+          throw new Error(`more then one stack found with name ${input['--stack-name']}. Set the --region parameter to restrict to a single region.`);
         }
-      };
-      const updateableStacksRandomOrder = (await relevantStacks()).filter(stack => stack.templateUpdateAvailable === true);
-      const g = graphlib.create('root', `widdix ${require('./package.json').version}`);
-      updateableStacksRandomOrder.forEach(stack => {
-        const id = `${stack.region}:${stack.name}`;
-        g.create(id, id, stack);
-      });
-      updateableStacksRandomOrder.forEach(stack => {
-        const node = g.find(`${stack.region}:${stack.name}`);
-        Object.keys(stack.parameters)
-          .filter(key => key.startsWith('Parent'))
-          .forEach(key => {
-            const parentStackName = stack.parameters[key];
-            if (parentStackName !== '') {
-              g.find(`${stack.region}:${parentStackName}`).connect(node);
-            }
-          });
-      });
-      const updateableStacks = g.sort().map(node => node.data()); // start with the stacks that have no dependencies
-      if (updateableStacks.length == 0) {
-        throw new Error('no update available');
+        return stacks;
+      } else {
+        const stacks = await fetchAllStacks(stdconsole, input['--region']);
+        return stacks;
       }
-      const updateableStacksWithTemplateDrift = updateableStacks.filter(stack => stack.templateDrift === true);
-      for (const stack of updateableStacksWithTemplateDrift) {
-        await yes(input['--yes'], `Stack ${stack.name} in ${stack.region} uses a modified template. An update will override any modificytions. Continue?`, stdconsole, stdin);
-      }
-      const stacksAndChangeSets = [];
-      for (const stack of updateableStacks) { // TODO optimization, run regions in parallel
-        const changeSet = await createChangeSet(stack);
-        stacksAndChangeSets.push({
-          stack,
-          changeSet
-        });
-      }
-      const rows = [];
-      stacksAndChangeSets.forEach(({stack, changeSet}) => {
-        rows.push([stack.region, stack.name, stack.templateId, `${stack.templateVersion} (updating to ${stack.templateLatestVersion})`, 'AWS::CloudFormation::Stack', stack.name, 'Update']);
-        changeSet.changes.map((change) => {
-          const row = [stack.region, stack.name, stack.templateId, change.resource.type, change.resource.id];
-          if (change.action === 'Modify') {
-            if (change.actionModifyReplacement === 'True') {
-              row.push('Replace');
-            } else if (change.actionModifyReplacement === 'False') {
-              row.push('Modify');
-            } else if (change.actionModifyReplacement === 'Conditional') {
-              row.push('Replace (Conditional)');
-            } else {
-              throw new Error(`unexpected actionModifyReplacement ${change.actionModifyReplacement}`);
-            }
-          } else {
-            row.push(change.action);
+    };
+    const updateableStacksRandomOrder = (await relevantStacks()).filter(stack => stack.templateUpdateAvailable === true);
+    const g = graphlib.create('root', `widdix ${require('./package.json').version}`);
+    updateableStacksRandomOrder.forEach(stack => {
+      const id = `${stack.region}:${stack.name}`;
+      g.create(id, id, stack);
+    });
+    updateableStacksRandomOrder.forEach(stack => {
+      const node = g.find(`${stack.region}:${stack.name}`);
+      Object.keys(stack.parameters)
+        .filter(key => key.startsWith('Parent'))
+        .forEach(key => {
+          const parentStackName = stack.parameters[key];
+          if (parentStackName !== '') {
+            g.find(`${stack.region}:${parentStackName}`).connect(node);
           }
-          rows.push(row);
         });
-      });
-      tablelib.print(stdconsole, stdout.columns, ['Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Resource Type', 'Resource Id', 'Resource Action'], rows);
-      await yes(input['--yes'], 'Apply changes?', stdconsole, stdin);
-      const eventTable = tablelib.create(['Time', 'Status', 'Type', 'Logical ID', 'Status Reason'], []);
-      eventTable.printHeader(stdconsole, stdout.columns);
-      for (const {stack, changeSet} of stacksAndChangeSets) {
-        await executeChangeSet(stack, changeSet, (event) => {
-          eventTable.printBodyRow(stdconsole, stdout.columns, [event.Timestamp, event.ResourceStatus, event.ResourceType, event.LogicalResourceId, event.ResourceStatusReason]);
-        });
-      }
-      eventTable.printFooter(stdconsole, stdout.columns);
+    });
+    const updateableStacks = g.sort().map(node => node.data()).reverse(); // start with stacks that have no dependencies
+    if (updateableStacks.length == 0) {
+      throw new Error('no update available');
     }
+    const updateableStacksWithTemplateDrift = updateableStacks.filter(stack => stack.templateDrift === true);
+    for (const stack of updateableStacksWithTemplateDrift) {
+      await yes(input['--yes'], `Stack ${stack.name} in ${stack.region} uses a modified template. An update will override any modificytions. Continue?`, stdconsole, stdin);
+    }
+    const stacksAndChangeSets = [];
+    for (const stack of updateableStacks) { // TODO optimization, run regions in parallel
+      const changeSet = await createChangeSet(stack);
+      stacksAndChangeSets.push({
+        stack,
+        changeSet
+      });
+    }
+    const rows = [];
+    stacksAndChangeSets.forEach(({stack, changeSet}) => {
+      rows.push([stack.region, stack.name, stack.templateId, `${stack.templateVersion} (updating to ${stack.templateLatestVersion})`, 'AWS::CloudFormation::Stack', stack.name, 'Update']);
+      changeSet.changes.map((change) => {
+        const row = [stack.region, stack.name, stack.templateId, change.resource.type, change.resource.id];
+        if (change.action === 'Modify') {
+          if (change.actionModifyReplacement === 'True') {
+            row.push('Replace');
+          } else if (change.actionModifyReplacement === 'False') {
+            row.push('Modify');
+          } else if (change.actionModifyReplacement === 'Conditional') {
+            row.push('Replace (Conditional)');
+          } else {
+            throw new Error(`unexpected actionModifyReplacement ${change.actionModifyReplacement}`);
+          }
+        } else {
+          row.push(change.action);
+        }
+        rows.push(row);
+      });
+    });
+    tablelib.print(stdconsole, stdout.columns, ['Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Resource Type', 'Resource Id', 'Resource Action'], rows);
+    await yes(input['--yes'], 'Apply changes?', stdconsole, stdin);
+    const eventTable = tablelib.create(['Time', 'Status', 'Type', 'Logical ID', 'Status Reason'], []);
+    eventTable.printHeader(stdconsole, stdout.columns);
+    for (const {stack, changeSet} of stacksAndChangeSets) {
+      await executeChangeSet(stack, changeSet, (event) => {
+        eventTable.printBodyRow(stdconsole, stdout.columns, [event.Timestamp, event.ResourceStatus, event.ResourceType, event.LogicalResourceId, event.ResourceStatusReason]);
+      });
+    }
+    eventTable.printFooter(stdconsole, stdout.columns);
+  }
 };
 
