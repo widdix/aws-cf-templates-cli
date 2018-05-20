@@ -14,6 +14,7 @@ const md5 = require('md5');
 
 const graphlib = require('./lib/graph.js');
 const tablelib = require('./lib/table.js');
+const loglib = require('./lib/log.js');
 
 const fetchTemplateSummary = (url) => {
   const cloudformation = new AWS.CloudFormation({
@@ -92,12 +93,17 @@ const fetchLatestTemplateVersion = async () => {
 };
 
 const extractTemplateIDFromStack = (stack) => {
-  return stack.Outputs.find((output) => output.OutputKey === 'TemplateID').OutputValue;
+  const templateId = stack.Outputs.find((output) => output.OutputKey === 'TemplateID').OutputValue;
+  if (templateId === undefined) {
+    loglib.warning(`can not extract template id in ${stack.Region} for stack ${stack.StackName}`, stack);
+  }
+  return templateId;
 };
 
-const extractTemplateVersionFromStack = (stack) => {
+const extractTemplateVersionFromStack = (templateId, stack) => {
   const output = stack.Outputs.find((output) => output.OutputKey === 'TemplateVersion');
   if (output === undefined || output.OutputValue === '__VERSION__') {
+    loglib.warning(`can not extract template version in ${stack.Region} for stack ${stack.StackName} (${templateId})`, stack);
     return undefined;
   }
   return output.OutputValue;
@@ -139,14 +145,19 @@ const enrichStack = async (stdconsole, templateId, templateVersion, stack) => {
     if (templateVersion === undefined) { // unreleased version, from git repo directly
       return undefined;
     }
-    return semver.gt(latestVersion, templateVersion);
+    try {
+      return semver.gt(latestVersion, templateVersion);
+    } catch (e) {
+      loglib.warning(`can not compare latest template version (v${latestVersion}) in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
+      return undefined;
+    }    
   };
   const latestVersion = await fetchLatestTemplateVersion().catch(e => {
-    stdconsole.error('can not get latest version', e);
+    loglib.warning(`can not get latest template version in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
     return undefined;
   });
   const templateDrift = await detectTemplateDrift(stack.Region, stack.StackName, templateId, templateVersion).catch(e => {
-    stdconsole.error(`can not get detect template drift in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
+    loglib.warning(`can not get detect template drift in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
     return undefined;
   });
   return {
@@ -176,7 +187,7 @@ const fetchAllStacks = (stdconsole, region) => {
           })
           .map((stack) => {
             const templateId = extractTemplateIDFromStack(stack);
-            const templateVersion = extractTemplateVersionFromStack(stack);
+            const templateVersion = extractTemplateVersionFromStack(templateId, stack);
             return enrichStack(stdconsole, templateId, templateVersion, stack);
           })
       );
@@ -350,7 +361,6 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
     region: 'us-east-1'
   });
 
-  try {
     if (input.list === true) {
       const stacks = await fetchAllStacks(stdconsole, input['--region']);
       const rows = stacks.map((stack) => {
@@ -474,9 +484,5 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
       }
       eventTable.printFooter(stdconsole, stdout.columns);
     }
-  } catch (err) {
-    return cb(err);
-  }
-  return cb();
 };
 

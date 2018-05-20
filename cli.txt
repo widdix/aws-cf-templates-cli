@@ -2,12 +2,12 @@ widdix CloudFormation CLI
 
 Usage:
   widdix catalogue [--debug]
-  widdix create [--template-id=<templateid>] [--stack-name=<stackname>] [--parameter=<key=value>...] [--debug]
-  widdix delete --stack-name=<stackname> [--debug]
-  widdix update [--stack-name=<stackname>] [--region=<region>] [--yes] [--debug]
-  widdix get --stack-name=<stackname> [--debug]
   widdix list [--region=<region>] [--debug]
   widdix graph [--region=<region>] [--debug]
+  widdix get --stack-name=<stackname> [--debug]
+  widdix create [--template-id=<templateid>] [--stack-name=<stackname>] [--parameter=<key=value>...] [--debug]
+  widdix update [--stack-name=<stackname>] [--region=<region>] [--yes] [--debug]
+  widdix delete --stack-name=<stackname> [--debug]
   widdix -h | --help
   widdix --version
 

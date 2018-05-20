@@ -1,12 +1,42 @@
-# widdix cli
+# widdix CLI
 
-A CLI tool to manage [Free Templates for AWS CloudFormation](https://github.com/widdix/aws-cf-templates).
+`widdix`, a CLI tool to manage [Free Templates for AWS CloudFormation](https://github.com/widdix/aws-cf-templates).
 
 ## Install
+
+Download the latest binary for your operating system:
+
+* MacOS: TODO
+* Linux: TODO
+* Windows: TODO
+
+### MacOS
+
+```
+chmod 755 widdix-macos
+mv widdix-macos /usr/local/bin/widdix
+widdix -v
+```
+
+### Linux
+
+```
+chmod 755 widdix-linux
+mv widdix-linux /usr/local/bin/widdix
+widdix -v
+```
+
+### Windows
 
 TODO
 
 ## Available Commands
+
+### Catalogue
+
+List all available templates that can be installed.
+
+> Not yet implemented!
 
 ### List
 
@@ -74,6 +104,18 @@ If you don't have `dot` installed, you can also use Docker:
 widdix graph | docker run -i robhaswell/dot-docker -Tpng > graph.png
 ```
 
+### Get
+
+Get information about a single stack.
+
+> Not yet implemented!
+
+### Create
+
+Create a new stack from a template in the catalogue. If the template needs connect to dependent stacks, you will be asked to select one of the existing stacks (if available) or to create the dependent stack as well.
+
+> Not yet implemented!
+
 ### Update
 
 If a new version of the template is released, you can update your existing stacks. To update all stacks in interactive mode, run:
@@ -96,11 +138,9 @@ You can filter AWS CloudFormation stacks based on region and/or AWS CloudFormati
 widdix update --region us-east-1 --stack-name vpc
 ```
 
-## Graphs
+### Delete
 
-```
-widdix graph | dot -Tpng > graph.png
-```
+> Not yet implemented!
 
 ## Config
 
@@ -117,3 +157,7 @@ The following environment variables are used if present. Earlier values win.
 * `AWS_SECRET_ACCESS_KEY`
 
 The widdix cli is implemented using the AWS SDK for Node.js and behaves as the SDK specifies.
+
+## Debug
+
+If something goes wrong, a log file (`widdix.log`) is written to the current working directory.

@@ -1,4 +1,5 @@
 node_modules/
+widdix.log
 widdix-linux
 widdix-macos
 widdix-win.exe
