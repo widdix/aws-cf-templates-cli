@@ -119,7 +119,7 @@ const fetchStacks = (region) => {
       NextToken: nextToken
     }).promise()
       .then((data) => {
-        const stacks = [...previousStacks, ...data.Stacks.map(stack => Object.assign({}, stack, {Region: region}))];
+        const stacks = [...previousStacks, ...data.Stacks.map(stack => Object.assign({}, stack, {Region: stack.StackId.split(':')[3], AccountId: stack.StackId.split(':')[4]}))];
         if (data.NextToken !== null && data.NextToken !== undefined) {
           return fetch(stacks, data.NextToken);
         } else {
@@ -161,6 +161,7 @@ const enrichStack = async (stdconsole, templateId, templateVersion, stack) => {
     return undefined;
   });
   return {
+    accountId: stack.AccountId,
     region: stack.Region,
     name: stack.StackName,
     parameters: stack.Parameters.reduce((acc, parameter) => {
@@ -332,7 +333,7 @@ module.exports.clearCache = () => {
   downloadFileCache.clear();
 };
 
-module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
+module.exports.run = async (argv, stdout, stderr, stdin) => {
   const cli = fs.readFileSync(path.join(__dirname, 'cli.txt'), {encoding: 'utf8'});
   const stdconsole = new console.Console(stdout, stderr);
   const input = docopt.docopt(cli, {
@@ -364,7 +365,7 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
   if (input.list === true) {
     const stacks = await fetchAllStacks(stdconsole, input['--region']);
     const rows = stacks.map((stack) => {
-      const row = [stack.region, stack.name, stack.templateId];
+      const row = [stack.accountId, stack.region, stack.name, stack.templateId];
       if (stack.templateUpdateAvailable === true) {
         row.push(`${stack.templateVersion} (latest ${stack.templateLatestVersion})`);
       } else {
@@ -373,7 +374,7 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
       row.push(stack.templateDrift);
       return row;
     });
-    tablelib.print(stdconsole, stdout.columns, ['Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Template Drift'], rows);
+    tablelib.print(stdconsole, stdout.columns, ['Stack Account ID', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Template Drift'], rows);
   } else if (input.graph === true) {
     const intelligentLabelShortening = (label) => {
       return truncate(label, 12, 12, '...');
@@ -415,28 +416,28 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
         }
         return stacks;
       } else {
-        const stacks = await fetchAllStacks(stdconsole, input['--region']);
-        return stacks;
+        const stacksRandomOrder = await fetchAllStacks(stdconsole, input['--region']);
+        const g = graphlib.create('root', `widdix ${require('./package.json').version}`);
+        stacksRandomOrder.forEach(stack => {
+          const id = `${stack.region}:${stack.name}`;
+          g.create(id, id, stack);
+        });
+        stacksRandomOrder.forEach(stack => {
+          const node = g.find(`${stack.region}:${stack.name}`);
+          Object.keys(stack.parameters)
+            .filter(key => key.startsWith('Parent'))
+            .forEach(key => {
+              const parentStackName = stack.parameters[key];
+              if (parentStackName !== '') {
+                g.find(`${stack.region}:${parentStackName}`).connect(node);
+              }
+            });
+        });
+        return g.sort().map(node => node.data()).reverse();  // start with stacks that have no dependencies
       }
     };
-    const updateableStacksRandomOrder = (await relevantStacks()).filter(stack => stack.templateUpdateAvailable === true);
-    const g = graphlib.create('root', `widdix ${require('./package.json').version}`);
-    updateableStacksRandomOrder.forEach(stack => {
-      const id = `${stack.region}:${stack.name}`;
-      g.create(id, id, stack);
-    });
-    updateableStacksRandomOrder.forEach(stack => {
-      const node = g.find(`${stack.region}:${stack.name}`);
-      Object.keys(stack.parameters)
-        .filter(key => key.startsWith('Parent'))
-        .forEach(key => {
-          const parentStackName = stack.parameters[key];
-          if (parentStackName !== '') {
-            g.find(`${stack.region}:${parentStackName}`).connect(node);
-          }
-        });
-    });
-    const updateableStacks = g.sort().map(node => node.data()).reverse(); // start with stacks that have no dependencies
+    const stacks = (await relevantStacks());
+    const updateableStacks = stacks.filter(stack => stack.templateUpdateAvailable === true);
     if (updateableStacks.length == 0) {
       throw new Error('no update available');
     }
@@ -454,9 +455,9 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
     }
     const rows = [];
     stacksAndChangeSets.forEach(({stack, changeSet}) => {
-      rows.push([stack.region, stack.name, stack.templateId, `${stack.templateVersion} (updating to ${stack.templateLatestVersion})`, 'AWS::CloudFormation::Stack', stack.name, 'Update']);
+      rows.push([stack.accountId, stack.region, stack.name, stack.templateId, `${stack.templateVersion} (updating to ${stack.templateLatestVersion})`, 'AWS::CloudFormation::Stack', stack.name, 'Update']);
       changeSet.changes.map((change) => {
-        const row = [stack.region, stack.name, stack.templateId, change.resource.type, change.resource.id];
+        const row = [stack.accountId, stack.region, stack.name, stack.templateId, change.resource.type, change.resource.id];
         if (change.action === 'Modify') {
           if (change.actionModifyReplacement === 'True') {
             row.push('Replace');
@@ -473,7 +474,7 @@ module.exports.run = async (argv, stdout, stderr, stdin, cb) => {
         rows.push(row);
       });
     });
-    tablelib.print(stdconsole, stdout.columns, ['Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Resource Type', 'Resource Id', 'Resource Action'], rows);
+    tablelib.print(stdconsole, stdout.columns, ['Stack Account ID', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Resource Type', 'Resource Id', 'Resource Action'], rows);
     await yes(input['--yes'], 'Apply changes?', stdconsole, stdin);
     const eventTable = tablelib.create(['Time', 'Status', 'Type', 'Logical ID', 'Status Reason'], []);
     eventTable.printHeader(stdconsole, stdout.columns);

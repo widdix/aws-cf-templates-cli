@@ -44,6 +44,7 @@ const generateCloudFormationDescribeStacksResponse = (stacks) => {
   stacks.forEach(stack => {
     xml += '<member>';
     xml += `<StackName>${stack.name}</StackName>`;
+    xml += `<StackId>arn:aws:cloudformation:us-east-1:123456789:stack/${stack.name}/aaf549a0-a413-11df-adb3-5081b3858e83</StackId>`;
     xml += `<Description>${stack.description}</Description>`;
     xml += `<StackStatus>${stack.status}</StackStatus>`;
     xml += '<Outputs>';
@@ -288,21 +289,22 @@ describe('cli', () => {
         .log(log);
 
       const {stdout, stdin, stderr} = stdiomock.stdio();
-      cli.run(['list'], stdout, stderr, stdin, (err) => {
-        assert.ifError(err);
-        assert.strictEqual(ec2.isDone(), true);
-        assert.strictEqual(github.isDone(), true);
-        assert.strictEqual(cloudformation.isDone(), true);
-        assert.strictEqual(s3.isDone(), true);
-        assert.strictEqual(stderr.data().length, 0);
-        const lines = stdout.data().join('').split('\n');
-        assert.strictEqual(lines.length, 6);
-        assert.strictEqual(lines[3].includes('us-east-1'), true);
-        assert.strictEqual(lines[3].includes('MyStack'), true);
-        assert.strictEqual(lines[3].includes('test'), true);
-        assert.strictEqual(lines[3].includes('6.13.0'), true);
-        done();
-      });
+      cli.run(['list'], stdout, stderr, stdin)
+        .then(() => {
+          assert.strictEqual(ec2.isDone(), true);
+          assert.strictEqual(github.isDone(), true);
+          assert.strictEqual(cloudformation.isDone(), true);
+          assert.strictEqual(s3.isDone(), true);
+          assert.strictEqual(stderr.data().length, 0);
+          const lines = stdout.data().join('').split('\n');
+          assert.strictEqual(lines.length, 6);
+          assert.strictEqual(lines[3].includes('us-east-1'), true);
+          assert.strictEqual(lines[3].includes('MyStack'), true);
+          assert.strictEqual(lines[3].includes('test'), true);
+          assert.strictEqual(lines[3].includes('6.13.0'), true);
+          done();
+        })
+        .catch(assert.fail);
     });
   });
   describe('update', () => {
@@ -395,28 +397,29 @@ describe('cli', () => {
             stdin.write('y');
           }
         });
-        cli.run(['update', '--stack-name', 'MyStack'], stdout, stderr, stdin, (err) => {
-          assert.ifError(err);
-          assert.strictEqual(ec2.isDone(), true);
-          assert.strictEqual(github.isDone(), true);
-          assert.strictEqual(cloudformation.isDone(), true);
-          assert.strictEqual(s3.isDone(), true);
-          assert.strictEqual(stderr.data().length, 0);
-          const lines = stdout.data().join('').split('\n');
-          assert.strictEqual(lines.length, 16);
-          assert.strictEqual(lines[3].includes('us-east-1'), true);
-          assert.strictEqual(lines[3].includes('MyStack'), true);
-          assert.strictEqual(lines[3].includes('test'), true);
-          assert.strictEqual(lines[3].includes('Update'), true);
-          assert.strictEqual(lines[5].includes('Apply changes?'), true);
-          assert.strictEqual(lines[9].includes('MyStack'), true);
-          assert.strictEqual(lines[9].includes('AWS::CloudFormation::Stack'), true);
-          assert.strictEqual(lines[9].includes('UPDATE_IN_PROGRESS'), true);
-          assert.strictEqual(lines[13].includes('MyStack'), true);
-          assert.strictEqual(lines[13].includes('AWS::CloudFormation::Stack'), true);
-          assert.strictEqual(lines[13].includes('UPDATE_COMPLETE'), true);
-          done();
-        });
+        cli.run(['update', '--stack-name', 'MyStack'], stdout, stderr, stdin)
+          .then(() => {
+            assert.strictEqual(ec2.isDone(), true);
+            assert.strictEqual(github.isDone(), true);
+            assert.strictEqual(cloudformation.isDone(), true);
+            assert.strictEqual(s3.isDone(), true);
+            assert.strictEqual(stderr.data().length, 0);
+            const lines = stdout.data().join('').split('\n');
+            assert.strictEqual(lines.length, 16);
+            assert.strictEqual(lines[3].includes('us-east-1'), true);
+            assert.strictEqual(lines[3].includes('MyStack'), true);
+            assert.strictEqual(lines[3].includes('test'), true);
+            assert.strictEqual(lines[3].includes('Update'), true);
+            assert.strictEqual(lines[5].includes('Apply changes?'), true);
+            assert.strictEqual(lines[9].includes('MyStack'), true);
+            assert.strictEqual(lines[9].includes('AWS::CloudFormation::Stack'), true);
+            assert.strictEqual(lines[9].includes('UPDATE_IN_PROGRESS'), true);
+            assert.strictEqual(lines[13].includes('MyStack'), true);
+            assert.strictEqual(lines[13].includes('AWS::CloudFormation::Stack'), true);
+            assert.strictEqual(lines[13].includes('UPDATE_COMPLETE'), true);
+            done();
+          })
+          .catch(assert.fail);
       });
     });
   });

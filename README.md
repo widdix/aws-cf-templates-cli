@@ -49,15 +49,15 @@ widdix list
 A sample output looks like this:
 
 ```
+--------------------------------------------------------------------------------------------------------------------------------------------
+| Stack Account ID | Stack Region | Stack Name              | Template ID                        | Template Version       | Template Drift |
 -------------------------------------------------------------------------------------------------------------------------
-| Stack Region | Stack Name              | Template ID                        | Template Version       | Template Drift |
--------------------------------------------------------------------------------------------------------------------------
-| eu-west-1    | operations-alert        | operations/alert                   | 6.14.0                 | false          |
-| eu-west-1    | jenkins-vpc-auth-proxy  | security/auth-proxy-ha-github-orga | 6.14.0                 | false          |
-| eu-west-1    | jenkins-ha-agents       | jenkins/jenkins2-ha-agents         | 6.13.0 (latest 6.14.0) | false          |
-| eu-west-1    | jenkins-vpc-ssh-bastion | vpc/vpc-ssh-bastion                | 6.14.0                 | false          |
-| eu-west-1    | jenkins-vpc-2azs        | vpc/vpc-2azs                       | 6.14.0                 | false          |
--------------------------------------------------------------------------------------------------------------------------
+| 123456789123     | eu-west-1    | operations-alert        | operations/alert                   | 6.14.0                 | false          |
+| 123456789123     | eu-west-1    | jenkins-vpc-auth-proxy  | security/auth-proxy-ha-github-orga | 6.14.0                 | false          |
+| 123456789123     | eu-west-1    | jenkins-ha-agents       | jenkins/jenkins2-ha-agents         | 6.13.0 (latest 6.14.0) | false          |
+| 123456789123     | eu-west-1    | jenkins-vpc-ssh-bastion | vpc/vpc-ssh-bastion                | 6.14.0                 | false          |
+| 123456789123     | eu-west-1    | jenkins-vpc-2azs        | vpc/vpc-2azs                       | 6.14.0                 | false          |
+--------------------------------------------------------------------------------------------------------------------------------------------
 ```
 
 To filter a AWS single region, run:
@@ -70,6 +70,7 @@ widdix list --region us-east-1
 
 | Column           | Description                                                                            |
 | ---------------- | -------------------------------------------------------------------------------------- |
+| Stack Account ID | AWS account ID.                                                                        |
 | Stack Region     | AWS region, like `us-east-1`.                                                          |
 | Stack Name       | Name of AWS CloudFormation stack.                                                      |
 | Template ID      | Template id, like `vpc/vpc-2azs`.                                                      |
