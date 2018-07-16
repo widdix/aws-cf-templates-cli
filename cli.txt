@@ -1,4 +1,4 @@
-widdix CloudFormation CLI
+widdix CLI
 
 Usage:
   widdix catalogue [--all-profiles] [--profile=<name>] [--env] [--debug] 

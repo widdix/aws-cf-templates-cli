@@ -30,13 +30,25 @@ widdix -v
 
 TODO
 
+## AWS Authorization & Authentication (IAM)
+
+### --env
+
+If you append the `--env` parameter, the following environment variables are used: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
+
+### --profile=<name>
+
+If you append the `--profile=<name>` parameter, the profile is loaded from ` ~/.aws/credentials` (MFA is supported).
+
+### --all-profiles
+
+If you append the `--all-profiles` parameter, all profiles from ` ~/.aws/credentials` are loaded (MFA is supported).
+
+### default
+
+If nothing is specified, the [AWS SDK for Node.js default behavior](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-credentials-node.html) applies.
+
 ## Available Commands
-
-### Catalogue
-
-List all available templates that can be installed.
-
-> Not yet implemented!
 
 ### List
 
@@ -49,15 +61,15 @@ widdix list
 A sample output looks like this:
 
 ```
---------------------------------------------------------------------------------------------------------------------------------------------
-| Stack Account ID | Stack Region | Stack Name              | Template ID                        | Template Version       | Template Drift |
--------------------------------------------------------------------------------------------------------------------------
-| 123456789123     | eu-west-1    | operations-alert        | operations/alert                   | 6.14.0                 | false          |
-| 123456789123     | eu-west-1    | jenkins-vpc-auth-proxy  | security/auth-proxy-ha-github-orga | 6.14.0                 | false          |
-| 123456789123     | eu-west-1    | jenkins-ha-agents       | jenkins/jenkins2-ha-agents         | 6.13.0 (latest 6.14.0) | false          |
-| 123456789123     | eu-west-1    | jenkins-vpc-ssh-bastion | vpc/vpc-ssh-bastion                | 6.14.0                 | false          |
-| 123456789123     | eu-west-1    | jenkins-vpc-2azs        | vpc/vpc-2azs                       | 6.14.0                 | false          |
---------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------
+| Stack Account | Stack Region | Stack Name              | Template ID                        | Template Version       | Template Drift |
+-----------------------------------------------------------------------------------------------------------------------------------------
+| 123456789123  | eu-west-1    | operations-alert        | operations/alert                   | 6.14.0                 | false          |
+| 123456789123  | eu-west-1    | jenkins-vpc-auth-proxy  | security/auth-proxy-ha-github-orga | 6.14.0                 | false          |
+| 123456789123  | eu-west-1    | jenkins-ha-agents       | jenkins/jenkins2-ha-agents         | 6.13.0 (latest 6.14.0) | false          |
+| 123456789123  | eu-west-1    | jenkins-vpc-ssh-bastion | vpc/vpc-ssh-bastion                | 6.14.0                 | false          |
+| 123456789123  | eu-west-1    | jenkins-vpc-2azs        | vpc/vpc-2azs                       | 6.14.0                 | false          |
+-----------------------------------------------------------------------------------------------------------------------------------------
 ```
 
 To filter a AWS single region, run:
@@ -70,7 +82,7 @@ widdix list --region us-east-1
 
 | Column           | Description                                                                            |
 | ---------------- | -------------------------------------------------------------------------------------- |
-| Stack Account ID | AWS account ID.                                                                        |
+| Stack Account    | AWS account alias or ID.                                                               |
 | Stack Region     | AWS region, like `us-east-1`.                                                          |
 | Stack Name       | Name of AWS CloudFormation stack.                                                      |
 | Template ID      | Template id, like `vpc/vpc-2azs`.                                                      |
@@ -105,18 +117,6 @@ If you don't have `dot` installed, you can also use Docker:
 widdix graph | docker run -i robhaswell/dot-docker -Tpng > graph.png
 ```
 
-### Get
-
-Get information about a single stack.
-
-> Not yet implemented!
-
-### Create
-
-Create a new stack from a template in the catalogue. If the template needs connect to dependent stacks, you will be asked to select one of the existing stacks (if available) or to create the dependent stack as well.
-
-> Not yet implemented!
-
 ### Update
 
 If a new version of the template is released, you can update your existing stacks. To update all stacks in interactive mode, run:
@@ -139,6 +139,26 @@ You can filter AWS CloudFormation stacks based on region and/or AWS CloudFormati
 widdix update --region us-east-1 --stack-name vpc
 ```
 
+## Future Commands
+
+### Catalogue
+
+List all available templates that can be installed.
+
+> Not yet implemented!
+
+### Get
+
+Get information about a single stack.
+
+> Not yet implemented!
+
+### Create
+
+Create a new stack from a template in the catalogue. If the template needs connect to dependent stacks, you will be asked to select one of the existing stacks (if available) or to create the dependent stack as well.
+
+> Not yet implemented!
+
 ### Delete
 
 > Not yet implemented!
@@ -149,30 +169,8 @@ widdix update --region us-east-1 --stack-name vpc
 
 The `HTTPS_PROXY` environment variable is used if set.
 
-### AWS
-
-#### --env
-
-If you append the `--env` parameter, the following environment variables are used: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
-
-#### --profile=<name>
-
-If you append the `--profile=<name>` parameter, the profile is loaded from ` ~/.aws/credentials` )MFA is supported).
-
-#### --all-profiles
-
-If you append the `--all-profiles` parameter, all profiles from ` ~/.aws/credentials` are loaded (MFA is supported).
-
-#### Default
-
-The following environment variables are used if present. Earlier values win.
-
-* `AWS_PROFILE`
-* `AWS_ACCESS_KEY_ID`
-* `AWS_SECRET_ACCESS_KEY`
-
-The widdix cli is implemented using the AWS SDK for Node.js and behaves as the SDK specifies.
-
 ## Debug
 
 If something goes wrong, a log file (`widdix.log`) is written to the current working directory.
+
+If you append the `--debug` parameter the log will be more verbose.
