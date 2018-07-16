@@ -15,21 +15,24 @@ const md5 = require('md5');
 const graphlib = require('./lib/graph.js');
 const tablelib = require('./lib/table.js');
 const loglib = require('./lib/log.js');
+const awscredslib = require('./lib/aws-credentials.js');
 
-const fetchTemplateSummary = (url) => {
-  const cloudformation = new AWS.CloudFormation({
-    apiVersion: '2010-05-15'
-  });
+const generateAwsConfig = (account, configOverrides) => {
+  return Object.assign({}, account.config, configOverrides);
+};
+
+const fetchTemplateSummary = (account, url) => {
+  const cloudformation = new AWS.CloudFormation(generateAwsConfig(account, {apiVersion: '2010-05-15'}));
   return cloudformation.getTemplateSummary({
     TemplateURL: url
   }).promise();
 };
 
-const detectTemplateDrift = async (stackRegion, stackName, templateId, templateVersion) => {
-  const cloudformation = new AWS.CloudFormation({
+const detectTemplateDrift = async (account, stackRegion, stackName, templateId, templateVersion) => {
+  const cloudformation = new AWS.CloudFormation(generateAwsConfig(account, {
     apiVersion: '2010-05-15',
     region: stackRegion
-  });
+  }));
   if (templateVersion === undefined) {
     return undefined;
   } else {
@@ -50,10 +53,8 @@ const downloadS3File = async (bucket, key) => {
   if (downloadFileCache.has(url)) {
     return downloadFileCache.get(url);
   }
-  const s3 = new AWS.S3({
-    apiVersion: '2006-03-01'
-  });
-  const p = s3.getObject({
+  const s3 = new AWS.S3({apiVersion: '2006-03-01'});
+  const p = s3.makeUnauthenticatedRequest('getObject', {
     Bucket: bucket,
     Key: key
   }).promise()
@@ -109,12 +110,22 @@ const extractTemplateVersionFromStack = (templateId, stack) => {
   return output.OutputValue;
 };
 
-const fetchStacks = (region) => {
+const extractParentStacksFromParameters = (parameters) => {
+  return Object.keys(parameters)
+    .filter(key => key.startsWith('Parent'))
+    .filter(key => parameters[key] !== '')
+    .map(key => ({
+      parameterName: key,
+      stackName: parameters[key]
+    }));
+};
+
+const fetchStacks = (account, region) => {
   const fetch = (previousStacks, nextToken) => {
-    const cloudformation = new AWS.CloudFormation({
+    const cloudformation = new AWS.CloudFormation(generateAwsConfig(account, {
       apiVersion: '2010-05-15',
       region: region
-    });
+    }));
     return cloudformation.describeStacks({
       NextToken: nextToken
     }).promise()
@@ -130,17 +141,24 @@ const fetchStacks = (region) => {
   return fetch([], null);
 };
 
-const fetchRegions = (region) => {
+const fetchRegions = (account, region) => {
   if (region !== null) {
     return Promise.resolve([region]);
   } else {
-    const ec2 = new AWS.EC2({apiVersion: '2016-11-15'});
+    const ec2 = new AWS.EC2(generateAwsConfig(account, {apiVersion: '2016-11-15'}));
     return ec2.describeRegions({}).promise()
       .then(data => data.Regions.map(region => region.RegionName));
   }
 };
 
-const enrichStack = async (stdconsole, templateId, templateVersion, stack) => {
+const enrichStack = async (account, stack) => {
+  const templateId = extractTemplateIDFromStack(stack);
+  const templateVersion = extractTemplateVersionFromStack(templateId, stack);
+  const parameters = stack.Parameters.reduce((acc, parameter) => {
+    acc[parameter.ParameterKey] = parameter.ParameterValue;
+    return acc;
+  }, {});
+  const parentStacks =  extractParentStacksFromParameters(parameters);
   const isUpdateAvailable = (latestVersion, templateVersion) => {
     if (templateVersion === undefined) { // unreleased version, from git repo directly
       return undefined;
@@ -156,29 +174,28 @@ const enrichStack = async (stdconsole, templateId, templateVersion, stack) => {
     loglib.warning(`can not get latest template version in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
     return undefined;
   });
-  const templateDrift = await detectTemplateDrift(stack.Region, stack.StackName, templateId, templateVersion).catch(e => {
+  const templateDrift = await detectTemplateDrift(account, stack.Region, stack.StackName, templateId, templateVersion).catch(e => {
     loglib.warning(`can not get detect template drift in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
     return undefined;
   });
   return {
     accountId: stack.AccountId,
+    account,
     region: stack.Region,
     name: stack.StackName,
-    parameters: stack.Parameters.reduce((acc, parameter) => {
-      acc[parameter.ParameterKey] = parameter.ParameterValue;
-      return acc;
-    }, {}),
+    parameters,
+    parentStacks,
     templateId,
     templateVersion,
-    templateDrift: templateDrift,
+    templateDrift,
     templateLatestVersion: latestVersion,
     templateUpdateAvailable: isUpdateAvailable(latestVersion, templateVersion)
   };
 };
 
-const fetchAllStacks = (stdconsole, region) => {
-  return fetchRegions(region)
-    .then(regions => Promise.all(regions.map(region => fetchStacks(region))))
+const fetchAllStacks = (account, region) => {
+  return fetchRegions(account, region)
+    .then(regions => Promise.all(regions.map(region => fetchStacks(account, region))))
     .then(stackLists => {
       return Promise.all(
         stackLists
@@ -187,15 +204,13 @@ const fetchAllStacks = (stdconsole, region) => {
             return stack.Outputs.some((output) => (output.OutputKey === 'TemplateID' && output.OutputValue.includes('/')));
           })
           .map((stack) => {
-            const templateId = extractTemplateIDFromStack(stack);
-            const templateVersion = extractTemplateVersionFromStack(templateId, stack);
-            return enrichStack(stdconsole, templateId, templateVersion, stack);
+            return enrichStack(account, stack);
           })
       );
     });
 };
 
-const yes = (alwaysYes, question, stdconsole, stdin) => {
+const yes = (stdconsole, stdin, question, alwaysYes) => {
   if (alwaysYes === true) {
     return Promise.resolve();
   } else {
@@ -214,13 +229,13 @@ const yes = (alwaysYes, question, stdconsole, stdin) => {
 };
 
 const createChangeSet = async (stack) => {
-  const cloudformation = new AWS.CloudFormation({
+  const cloudformation = new AWS.CloudFormation(generateAwsConfig(stack.account, {
     apiVersion: '2010-05-15',
     region: stack.region
-  });
+  }));
   const changeSetName = `widdix-${crypto.randomBytes(16).toString('hex')}`;
   const templateURL = `https://s3-eu-west-1.amazonaws.com/widdix-aws-cf-templates-releases-eu-west-1/v${stack.templateLatestVersion}/${stack.templateId}.yaml`;
-  const template = await fetchTemplateSummary(templateURL);
+  const template = await fetchTemplateSummary(stack.account, templateURL);
   const parameters = template.Parameters.reduce((acc, parameter) => {
     acc[parameter.ParameterKey] = {
       default: parameter.DefaultValue,
@@ -232,7 +247,7 @@ const createChangeSet = async (stack) => {
     ChangeSetName: changeSetName,
     StackName: stack.name,
     ChangeSetType: 'UPDATE',
-    Description: `widdix ${require('./package.json').version}`,
+    Description: `widdix-v${require('./package.json').version}`,
     Parameters: Object.keys(parameters).map(key => {
       const parameter = parameters[key];
       const ret ={
@@ -270,10 +285,10 @@ const createChangeSet = async (stack) => {
 const timeout = async (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const tailStackEvents = async (stack, changeSetType, eventCallback) => {
-  const cloudformation = new AWS.CloudFormation({
+  const cloudformation = new AWS.CloudFormation(generateAwsConfig(stack.account, {
     apiVersion: '2010-05-15',
     region: stack.region
-  });
+  }));
   const publishedEventIds = new Set();
   const publishEvent = (event) => {
     publishedEventIds.add(event.EventId);
@@ -318,10 +333,10 @@ const tailStackEvents = async (stack, changeSetType, eventCallback) => {
 };
 
 const executeChangeSet = async (stack, changeSet, eventCallback) => {
-  const cloudformation = new AWS.CloudFormation({
+  const cloudformation = new AWS.CloudFormation(generateAwsConfig(stack.account, {
     apiVersion: '2010-05-15',
     region: stack.region
-  });
+  }));
   await cloudformation.executeChangeSet({
     ChangeSetName: changeSet.name,
     StackName: stack.name
@@ -329,8 +344,125 @@ const executeChangeSet = async (stack, changeSet, eventCallback) => {
   await tailStackEvents(stack, 'UPDATE', eventCallback);
 };
 
+const token = (stdconsole, stdin, question) => {
+  return new Promise((resolve, reject) => {
+    stdin.once('data', b => {
+      const answer = b.toString('utf8').replace(/[^0-9]/gi, '');
+      if (answer.length !== 6) {
+        reject(new Error('a token must have 6 digits'));
+      } else {
+        resolve(answer);
+      }
+    });
+    stdconsole.info(question);
+  });
+};
+
+const sessionTokenCredentialsCache = new Map();
+const createSessionTokenCredentials = async (stdconsole, stdin, masterCredentials, serialNumber) => {
+  if (sessionTokenCredentialsCache.has(serialNumber)) {
+    return sessionTokenCredentialsCache.get(serialNumber);
+  } else {
+    const code = await token(stdconsole, stdin, `Please enter the MFA token for ${serialNumber}`);
+    const credentials = new AWS.TemporaryCredentials({
+      DurationSeconds: 60 * 60 * 12,
+      SerialNumber: serialNumber,
+      TokenCode: code
+    }, masterCredentials);
+    await credentials.getPromise(); // TODO could be cached on disk?
+    delete credentials.masterCredentials; // otherwise the aws sdk uses the original masterCredentaisl for assume role instead of the session token
+    sessionTokenCredentialsCache.set(serialNumber, credentials);
+    return credentials;
+  }
+};
+
+const fetchAwsAccounts = async (stdconsole, stdin, input) => {
+  if (input['--env'] === true) {
+    return [{
+      type: 'env',
+      label: 'AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN',
+      config: {
+        credentials: new AWS.EnvironmentCredentials('AWS')
+      }
+    }];
+  } else if (input['--profile'] !== null || input['--all-profiles'] === true) {
+    const profiles = await awscredslib.fetchProfiles();
+    const accounts = [];
+    const keys = Object.keys(profiles);
+    for (const key of keys) {
+      if (input['--profile'] !== null && key !== input['--profile']) {
+        continue;
+      }
+      const profile = profiles[key];
+      if ('aws_access_key_id' in profile && 'aws_secret_access_key' in profile) {
+        const credentials = new AWS.Credentials({
+          accessKeyId: profile.aws_access_key_id,
+          secretAccessKey: profile.aws_secret_access_key
+          // TODO sessionToken
+        });
+        accounts.push({
+          type: 'access-key',
+          label: `profile ${key}`,
+          config: {
+            credentials
+          }
+        });
+      } else if ('role_arn' in profile && 'source_profile' in profile && 'mfa_serial' in profile) {
+        const sourceProfile = profiles[profile.source_profile];
+        const masterCredentials = new AWS.Credentials(sourceProfile.aws_access_key_id, sourceProfile.aws_secret_access_key); // TODO optional 3rd argument sessionToken
+        const sessionTokenCredentials = await createSessionTokenCredentials(stdconsole, stdin, masterCredentials, profile.mfa_serial);
+        const params = {
+          RoleArn: profile.role_arn,
+          RoleSessionName: `widdix-v${require('./package.json').version}`,
+          DurationSeconds: 15 * 60 // TODO make timeout of 15 minutes configurable
+        };
+        if ('external_id' in profile) {
+          params.ExternalId = profile.external_id;
+        }
+        const credentials = new AWS.TemporaryCredentials(params, sessionTokenCredentials);
+        await credentials.getPromise();
+        accounts.push({
+          type: 'role-mfa',
+          label: `profile ${key}`,
+          config: {
+            credentials
+          }
+        });
+      } else if ('role_arn' in profile && 'source_profile' in profile) {
+        const sourceProfile = profiles[profile.source_profile];
+        const masterCredentials = new AWS.Credentials(sourceProfile.aws_access_key_id, sourceProfile.aws_secret_access_key); // TODO optional 3rd argument sessionToken
+        const params = {
+          RoleArn: profile.role_arn,
+          RoleSessionName: `widdix-v${require('./package.json').version}`,
+          DurationSeconds: 15 * 60 // TODO make timeout of 15 minutes configurable
+        };
+        if ('external_id' in profile) {
+          params.ExternalId = profile.external_id;
+        }
+        const credentials = new AWS.TemporaryCredentials(params, masterCredentials);
+        await credentials.getPromise();
+        accounts.push({
+          type: 'role',
+          label: `profile ${key}`,
+          config: {
+            credentials
+          }
+        });
+      }
+    }
+    return accounts;
+  } else {
+    return [{
+      type: 'default',
+      label: 'default AWS Nodejs. SDK chain',
+      config: {}
+    }];
+  }
+};
+
 module.exports.clearCache = () => {
   downloadFileCache.clear();
+  sessionTokenCredentialsCache.clear();
 };
 
 module.exports.run = async (argv, stdout, stderr, stdin) => {
@@ -363,24 +495,35 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
   });
 
   if (input.list === true) {
-    const stacks = await fetchAllStacks(stdconsole, input['--region']);
-    const rows = stacks.map((stack) => {
-      const row = [stack.accountId, stack.region, stack.name, stack.templateId];
-      if (stack.templateUpdateAvailable === true) {
-        row.push(`${stack.templateVersion} (latest ${stack.templateLatestVersion})`);
-      } else {
-        row.push(stack.templateVersion);
+    const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
+    const rows = [];
+    for (const account of accounts) {
+      try {
+        const stacks = await fetchAllStacks(account, input['--region']);
+        const accountRows = stacks.map((stack) => {
+          const row = [stack.accountId, stack.region, stack.name, stack.templateId];
+          if (stack.templateUpdateAvailable === true) {
+            row.push(`${stack.templateVersion} (latest ${stack.templateLatestVersion})`);
+          } else {
+            row.push(stack.templateVersion);
+          }
+          row.push(stack.templateDrift);
+          return row;
+        });
+        rows.push(...accountRows);
+      } catch (err) {
+        loglib.error(`can not access account ${account.label} of type ${account.type}`, err);
       }
-      row.push(stack.templateDrift);
-      return row;
-    });
+    }
     tablelib.print(stdconsole, stdout.columns, ['Stack Account ID', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Template Drift'], rows);
   } else if (input.graph === true) {
+    const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
     const intelligentLabelShortening = (label) => {
       return truncate(label, 12, 12, '...');
     };
-    const stacks = await fetchAllStacks(stdconsole, input['--region']);
-    const groot = graphlib.create('root', `widdix ${require('./package.json').version}`);
+    const account = accounts[0]; // TODO for (const account of accounts) { }
+    const stacks = await fetchAllStacks(account, input['--region']);
+    const groot = graphlib.create('root', `widdix-v${require('./package.json').version}`);
     stacks.forEach(stack => {
       const g = groot.subgraph(stack.region, stack.region);
       let label = `${stack.templateId}\n${intelligentLabelShortening(stack.name)}\n`;
@@ -394,20 +537,17 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
     stacks.forEach(stack => {
       const g = groot.subgraph(stack.region, stack.region);
       const node = g.find(`${stack.region}:${stack.name}`);
-      Object.keys(stack.parameters)
-        .filter(key => key.startsWith('Parent'))
-        .forEach(key => {
-          const parentStackName = stack.parameters[key];
-          if (parentStackName !== '') {
-            g.find(`${stack.region}:${parentStackName}`).connect(node);
-          }
-        });
+      stack.parentStacks.forEach(parentStack => {
+        g.find(`${stack.region}:${parentStack.stackName}`).connect(node);
+      });
     });
     stdconsole.log(groot.toDOT());
   } else if (input.update === true) {
     const relevantStacks = async () => {
       if (input['--stack-name'] !== null) {
-        const allStacks = await fetchAllStacks(stdconsole, input['--region']);
+        const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
+        const account = accounts[0]; // TODO for (const account of accounts) { }
+        const allStacks = await fetchAllStacks(account, input['--region']);
         const stacks = allStacks.filter(stack => stack.name === input['--stack-name']);
         if (stacks.length === 0) {
           throw new Error(`no stack found with name ${input['--stack-name']}`);
@@ -416,24 +556,22 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
         }
         return stacks;
       } else {
-        const stacksRandomOrder = await fetchAllStacks(stdconsole, input['--region']);
-        const g = graphlib.create('root', `widdix ${require('./package.json').version}`);
-        stacksRandomOrder.forEach(stack => {
-          const id = `${stack.region}:${stack.name}`;
-          g.create(id, id, stack);
-        });
-        stacksRandomOrder.forEach(stack => {
-          const node = g.find(`${stack.region}:${stack.name}`);
-          Object.keys(stack.parameters)
-            .filter(key => key.startsWith('Parent'))
-            .forEach(key => {
-              const parentStackName = stack.parameters[key];
-              if (parentStackName !== '') {
-                g.find(`${stack.region}:${parentStackName}`).connect(node);
-              }
+        const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
+        const g = graphlib.create('root', `widdix-v${require('./package.json').version}`);
+        for (const account of accounts) {
+          const stacksRandomOrder = await fetchAllStacks(account, input['--region']);
+          stacksRandomOrder.forEach(stack => {
+            const id = `${stack.accountId}:${stack.region}:${stack.name}`;
+            g.create(id, id, stack);
+          });
+          stacksRandomOrder.forEach(stack => {
+            const node = g.find(`${stack.region}:${stack.name}`);
+            stack.parentStacks.forEach(parentStack => {
+              g.find(`${stack.accountId}:${stack.region}:${parentStack.stackName}`).connect(node);
             });
-        });
-        return g.sort().map(node => node.data()).reverse();  // start with stacks that have no dependencies
+          });
+        }
+        return g.sort().map(node => node.data()).reverse(); // start with stacks that have no dependencies
       }
     };
     const stacks = (await relevantStacks());
@@ -443,7 +581,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
     }
     const updateableStacksWithTemplateDrift = updateableStacks.filter(stack => stack.templateDrift === true);
     for (const stack of updateableStacksWithTemplateDrift) {
-      await yes(input['--yes'], `Stack ${stack.name} in ${stack.region} uses a modified template. An update will override any modificytions. Continue?`, stdconsole, stdin);
+      await yes(stdconsole, stdin, `Stack ${stack.name} in ${stack.region} uses a modified template. An update will override any modificytions. Continue?`, input['--yes']);
     }
     const stacksAndChangeSets = [];
     for (const stack of updateableStacks) { // TODO optimization, run regions in parallel
@@ -475,7 +613,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
       });
     });
     tablelib.print(stdconsole, stdout.columns, ['Stack Account ID', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Resource Type', 'Resource Id', 'Resource Action'], rows);
-    await yes(input['--yes'], 'Apply changes?', stdconsole, stdin);
+    await yes(stdconsole, stdin, 'Apply changes?', input['--yes']);
     const eventTable = tablelib.create(['Time', 'Status', 'Type', 'Logical ID', 'Status Reason'], []);
     eventTable.printHeader(stdconsole, stdout.columns);
     for (const {stack, changeSet} of stacksAndChangeSets) {

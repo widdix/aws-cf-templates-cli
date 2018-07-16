@@ -1,13 +1,13 @@
 widdix CloudFormation CLI
 
 Usage:
-  widdix catalogue [--debug]
-  widdix list [--region=<region>] [--debug]
-  widdix graph [--region=<region>] [--debug]
-  widdix get --stack-name=<stackname> [--debug]
-  widdix create [--template-id=<templateid>] [--stack-name=<stackname>] [--parameter=<key=value>...] [--debug]
-  widdix update [--stack-name=<stackname>] [--region=<region>] [--yes] [--debug]
-  widdix delete --stack-name=<stackname> [--debug]
+  widdix catalogue [--all-profiles] [--profile=<name>] [--env] [--debug] 
+  widdix list [--region=<region>] [--all-profiles] [--profile=<name>] [--env] [--debug]
+  widdix graph [--region=<region>] [--all-profiles] [--profile=<name>] [--env] [--debug]
+  widdix get --stack-name=<stackname> [--region=<region>] [--all-profiles] [--profile=<name>] [--env] [--debug]
+  widdix create [--template-id=<templateid>] [--stack-name=<stackname>] [--parameter=<key=value>...] [--all-profiles] [--profile=<name>] [--env] [--debug]
+  widdix update [--stack-name=<stackname>] [--region=<region>] [--yes] [--all-profiles] [--profile=<name>] [--env] [--debug]
+  widdix delete --stack-name=<stackname> [--all-profiles] [--profile=<name>] [--env] [--debug]
   widdix -h | --help
   widdix --version
 
@@ -18,5 +18,8 @@ Options:
   -p <key=value>, --parameter=<key=value>         Format ParameterKey=ParameterValue.
   -y, --yes                                       Answer all questions with yes.
   -d, --debug                                     Print debug information.
+  --all-profiles                                  All profiles from ~/.aws/credentials
+  --profile=<name>                                One specific profile from ~/.aws/credentials
+  --env                                           Using environment variables AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
   -h, --help                                      Show help.
   -v, --version                                   Show version.

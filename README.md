@@ -151,6 +151,20 @@ The `HTTPS_PROXY` environment variable is used if set.
 
 ### AWS
 
+#### --env
+
+If you append the `--env` parameter, the following environment variables are used: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
+
+#### --profile=<name>
+
+If you append the `--profile=<name>` parameter, the profile is loaded from ` ~/.aws/credentials` )MFA is supported).
+
+#### --all-profiles
+
+If you append the `--all-profiles` parameter, all profiles from ` ~/.aws/credentials` are loaded (MFA is supported).
+
+#### Default
+
 The following environment variables are used if present. Earlier values win.
 
 * `AWS_PROFILE`

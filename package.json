@@ -2,9 +2,9 @@
   "name": "widdix",
   "version": "0.1.0",
   "dependencies": {
-    "aws-sdk": "2.217.1",
+    "aws-sdk": "2.275.1",
     "docopt": "0.6.2",
-    "proxy-agent": "2.2.0",
+    "proxy-agent": "3.0.1",
     "requestretry": "1.13.0",
     "semver": "5.5.0",
     "truncate-middle": "1.0.5",
@@ -13,11 +13,11 @@
     "serialize-error": "2.1.0"
   },
   "devDependencies": {
-    "pkg": "4.3.1",
-    "eslint": "4.19.1",
+    "pkg": "4.3.3",
+    "eslint": "5.1.0",
     "istanbul": "0.4.5",
-    "mocha": "5.0.5",
-    "nock": "9.1.6",
+    "mocha": "5.2.0",
+    "nock": "9.4.2",
     "stdio-mock": "1.1.0"
   },
   "scripts": {
