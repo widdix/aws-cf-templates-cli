@@ -2,6 +2,8 @@
 
 `widdix`, a CLI tool to manage [Free Templates for AWS CloudFormation](https://github.com/widdix/aws-cf-templates).
 
+> The widdix CLI is compatible with templates >= v6.13.0
+
 ## Install
 
 Download the latest binary for your operating system:
@@ -75,7 +77,7 @@ A sample output looks like this:
 To filter a AWS single region, run:
 
 ```
-widdix list --region us-east-1
+widdix list --region=us-east-1
 ```
 
 #### Columns
@@ -102,7 +104,7 @@ widdix graph
 To filter a single AWS region, run:
 
 ```
-widdix graph --region us-east-1
+widdix graph --region=us-east-1
 ```
 
 Do visualize the graph in a png file, pipe stdout to `dot`:
@@ -136,7 +138,7 @@ The update behaves as follows:
 You can filter AWS CloudFormation stacks based on region and/or AWS CloudFormation stack name like this:
 
 ```
-widdix update --region us-east-1 --stack-name vpc
+widdix update --region=us-east-1 --stack-name=vpc
 ```
 
 ## Future Commands
