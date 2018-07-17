@@ -6,11 +6,7 @@
 
 ## Install
 
-Download the latest binary for your operating system:
-
-* MacOS: TODO
-* Linux: TODO
-* Windows: TODO
+Download the latest binary for your operating system: https://github.com/widdix/aws-cf-templates-cli/releases
 
 ### MacOS
 
