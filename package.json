@@ -1,6 +1,9 @@
 {
   "name": "widdix",
   "version": "0.1.0",
+  "description": "A CLI tool to manage Free Templates for AWS CloudFormation",
+  "author": "Michael Wittig <michael@widdix.de>",
+  "license": "Apache-2.0",
   "dependencies": {
     "aws-sdk": "2.275.1",
     "docopt": "0.6.2",
