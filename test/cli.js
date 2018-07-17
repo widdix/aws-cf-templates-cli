@@ -354,12 +354,18 @@ describe('cli', () => {
           .post('/', {
             Action: 'CreateChangeSet',
             Version: '2010-05-15',
-            'Capabilities.member.1': 'CAPABILITY_IAM',
+            Capabilities: {
+              member: ['CAPABILITY_IAM']
+            },
             ChangeSetName: /.*/,
             ChangeSetType: 'UPDATE',
             Description: /.*/,
-            'Parameters.member.1.ParameterKey': 'NameA',
-            'Parameters.member.1.ParameterValue': 'x',
+            Parameters: {
+              member: [{
+                ParameterKey: 'NameA',
+                ParameterValue: 'x'
+              }]
+            },
             StackName: 'MyStack',
             TemplateURL: 'https://s3-eu-west-1.amazonaws.com/widdix-aws-cf-templates-releases-eu-west-1/v6.13.0/test/test.yaml'
           })
