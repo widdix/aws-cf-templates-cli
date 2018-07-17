@@ -500,6 +500,13 @@ const fetchAwsAccounts = async (stdconsole, stdin, input) => {
         }
       }
     }
+    if (accounts.length === 0) {
+      if (input['--profile'] !== null) {
+        throw new Error(`profile ${input['--profile']} not found`);
+      } else {
+        throw new Error('no profiles found');
+      }
+    }
     return accounts;
   } else {
     return [await enrichAwsAccount({
