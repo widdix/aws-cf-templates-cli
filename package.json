@@ -21,7 +21,7 @@
     "stdio-mock": "1.1.0"
   },
   "scripts": {
-    "test": "eslint . && mocha test/*.js",
+    "test": "eslint . && mocha -t 10000 test/*.js",
     "package": "pkg package.json --targets node8-linux-x64,node8-macos-x64,node8-win-x64"
   },
   "bin": "index.js",
