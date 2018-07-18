@@ -289,6 +289,7 @@ describe('cli', () => {
         .log(log);
 
       const {stdout, stdin, stderr} = stdiomock.stdio();
+      stdout.columns = 300;
       cli.run(['list'], stdout, stderr, stdin)
         .then(() => {
           assert.strictEqual(ec2.isDone(), true);
