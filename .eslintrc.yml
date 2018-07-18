@@ -17,6 +17,4 @@ rules:
   semi:
   - error
   - always
-  no-console:
-  - error
-  - allow: [info, warn, error]
+  no-console: 0
