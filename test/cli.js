@@ -303,8 +303,7 @@ describe('cli', () => {
           assert.strictEqual(lines[3].includes('test'), true);
           assert.strictEqual(lines[3].includes('6.13.0'), true);
           done();
-        })
-        .catch(assert.fail);
+        });
     });
   });
   describe('update', () => {
@@ -424,8 +423,7 @@ describe('cli', () => {
             assert.strictEqual(lines[13].includes('AWS::CloudFormation::Stack'), true);
             assert.strictEqual(lines[13].includes('UPDATE_COMPLETE'), true);
             done();
-          })
-          .catch(assert.fail);
+          });
       });
     });
   });
