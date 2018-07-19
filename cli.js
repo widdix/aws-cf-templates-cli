@@ -642,7 +642,8 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
             g.create(id, id, stack);
           });
           stacksRandomOrder.forEach(stack => {
-            const node = g.find(`${stack.region}:${stack.name}`);
+            const id = `${stack.account.id}:${stack.region}:${stack.name}`;
+            const node = g.find(id);
             stack.parentStacks.forEach(parentStack => {
               g.find(`${stack.account.id}:${stack.region}:${parentStack.stackName}`).connect(node);
             });
