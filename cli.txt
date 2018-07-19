@@ -1,12 +1,12 @@
 widdix CLI
 
 Usage:
-  widdix catalogue [--all-profiles] [--profile=<name>] [--env] [--debug] 
-  widdix list [--region=<region>] [--all-profiles] [--profile=<name>] [--env] [--debug]
-  widdix graph [--region=<region>] [--all-profiles] [--profile=<name>] [--env] [--debug]
-  widdix get --stack-name=<stackname> [--region=<region>] [--all-profiles] [--profile=<name>] [--env] [--debug]
-  widdix create [--template-id=<templateid>] [--stack-name=<stackname>] [--parameter=<key=value>...] [--all-profiles] [--profile=<name>] [--env] [--debug]
-  widdix update [--stack-name=<stackname>] [--region=<region>] [--yes] [--all-profiles] [--profile=<name>] [--env] [--debug]
+  widdix catalogue [--all-profiles] [--profile=<name>] [--env] [--debug]
+  widdix list [--region=<region>] [--all-profiles] [--profile=<name>] [--env] [--latest-version=<version>] [--debug]
+  widdix graph [--region=<region>] [--all-profiles] [--profile=<name>] [--env] [--latest-version=<version>] [--debug]
+  widdix get --stack-name=<stackname> [--region=<region>] [--all-profiles] [--profile=<name>] [--env] [--latest-version=<version>] [--debug]
+  widdix create [--template-id=<templateid>] [--stack-name=<stackname>] [--parameter=<key=value>...] [--all-profiles] [--profile=<name>] [--env] [--latest-version=<version>] [--debug]
+  widdix update [--stack-name=<stackname>] [--region=<region>] [--yes] [--all-profiles] [--profile=<name>] [--env] [--latest-version=<version>] [--debug]
   widdix delete --stack-name=<stackname> [--all-profiles] [--profile=<name>] [--env] [--debug]
   widdix -h | --help
   widdix --version
@@ -21,5 +21,6 @@ Options:
   --all-profiles                                  All profiles from ~/.aws/credentials
   --profile=<name>                                One specific profile from ~/.aws/credentials
   --env                                           Using environment variables AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
+  --latest-version=<version>                      Override latest version fetched from GitHub
   -h, --help                                      Show help.
   -v, --version                                   Show version.

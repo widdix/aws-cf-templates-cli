@@ -88,7 +88,10 @@ const downloadFile = (url) => { // includes caching
   return p;
 };
 
-const fetchLatestTemplateVersion = async () => {
+const fetchLatestTemplateVersion = async (input) => {
+  if (input['--latest-version'] !== null) {
+    return input['--latest-version'];
+  }
   const body = await downloadFile('https://github.com/widdix/aws-cf-templates/releases.atom');
   return body.match(/<title>(v[0-9.]*)<\/title>/i)[1].replace('v', '');
 };
@@ -151,7 +154,7 @@ const fetchRegions = (account, region) => {
   }
 };
 
-const enrichStack = async (account, stack) => {
+const enrichStack = async (account, stack, input) => {
   const templateId = extractTemplateIDFromStack(stack);
   const templateVersion = extractTemplateVersionFromStack(templateId, stack);
   const parameters = stack.Parameters.reduce((acc, parameter) => {
@@ -170,7 +173,7 @@ const enrichStack = async (account, stack) => {
       return undefined;
     }    
   };
-  const latestVersion = await fetchLatestTemplateVersion().catch(e => {
+  const latestVersion = await fetchLatestTemplateVersion(input).catch(e => {
     loglib.warning(`can not get latest template version in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
     return undefined;
   });
@@ -192,8 +195,8 @@ const enrichStack = async (account, stack) => {
   };
 };
 
-const fetchAllStacks = (account, region) => {
-  return fetchRegions(account, region)
+const fetchAllStacks = (account, input) => {
+  return fetchRegions(account, input['--region'])
     .then(regions => Promise.all(regions.map(region => fetchStacks(account, region))))
     .then(stackLists => {
       return Promise.all(
@@ -203,7 +206,7 @@ const fetchAllStacks = (account, region) => {
             return stack.Outputs.some((output) => (output.OutputKey === 'TemplateID' && output.OutputValue.includes('/')));
           })
           .map((stack) => {
-            return enrichStack(account, stack);
+            return enrichStack(account, stack, input);
           })
       );
     });
@@ -568,7 +571,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
     const rows = [];
     for (const account of accounts) {
       try {
-        const stacks = await fetchAllStacks(account, input['--region']);
+        const stacks = await fetchAllStacks(account, input);
         const accountRows = stacks.map((stack) => {
           const row = [displayAccount(account), stack.region, stack.name, stack.templateId];
           if (stack.templateUpdateAvailable === true) {
@@ -593,7 +596,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
     const groot = graphlib.create('root', `widdix-v${require('./package.json').version}`);
     for (const account of accounts) {
       try {
-        const stacks = await fetchAllStacks(account, input['--region']);
+        const stacks = await fetchAllStacks(account, input);
         const gaccount = groot.subgraph(account.id, displayAccount(account));
         stacks.forEach(stack => {
           const gregion = gaccount.subgraph(stack.region, stack.region);
@@ -623,7 +626,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
         const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
         const stacks = [];
         for (const account of accounts) {
-          const allStacks = await fetchAllStacks(account, input['--region']);
+          const allStacks = await fetchAllStacks(account, input);
           Array.prototype.push.apply(stacks, allStacks.filter(stack => stack.name === input['--stack-name']));
         }
         if (stacks.length === 0) {
@@ -636,7 +639,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
         const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
         const g = graphlib.create('root', `widdix-v${require('./package.json').version}`);
         for (const account of accounts) {
-          const stacksRandomOrder = await fetchAllStacks(account, input['--region']);
+          const stacksRandomOrder = await fetchAllStacks(account, input);
           stacksRandomOrder.forEach(stack => {
             const id = `${stack.account.id}:${stack.region}:${stack.name}`;
             g.create(id, id, stack);
