@@ -673,7 +673,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
     stacksAndChangeSets.forEach(({stack, changeSet}) => {
       rows.push([displayAccount(stack.account), stack.region, stack.name, stack.templateId, `${stack.templateVersion} (updating to ${stack.templateLatestVersion})`, 'AWS::CloudFormation::Stack', stack.name, 'Update']);
       changeSet.changes.map((change) => {
-        const row = [displayAccount(stack.account), stack.region, stack.name, stack.templateId, change.resource.type, change.resource.id];
+        const row = [displayAccount(stack.account), stack.region, stack.name, stack.templateId, `${stack.templateVersion} (updating to ${stack.templateLatestVersion})`, change.resource.type, change.resource.id];
         if (change.action === 'Modify') {
           if (change.actionModifyReplacement === 'True') {
             row.push('Replace');
