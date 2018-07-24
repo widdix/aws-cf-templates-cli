@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 'use strict';
 
 const loglib = require('./lib/log.js');
