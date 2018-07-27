@@ -41,8 +41,8 @@ const detectTemplateDrift = async (account, stackRegion, stackName, templateId, 
       StackName: stackName
     }).promise();
     // CloudFormation replaces non-ascii chars with ? 
-    const rawMd5 = md5(rawTemplate.replace(/[^\x00-\x7F]/g, '?')); // eslint-disable-line no-control-regex 
-    const liveMd5 = md5(liveTemplate.TemplateBody);
+    const rawMd5 = md5(rawTemplate.replace(/[^\x00-\x7F]/g, '?').trim()); // eslint-disable-line no-control-regex 
+    const liveMd5 = md5(liveTemplate.TemplateBody.trim());
     return rawMd5 !== liveMd5;
   }
 };
