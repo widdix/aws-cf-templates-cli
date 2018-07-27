@@ -21,18 +21,41 @@ const generateAwsConfig = (account, configOverrides) => {
   return Object.assign({}, account.config, configOverrides);
 };
 
+const generateAwsCloudFormationConfig = (account, configOverrides) => {
+  const config = {
+    apiVersion: '2010-05-15',
+    maxRetries: 11,
+    retryDelayOptions: {
+      /*
+      | retryCount | sleep in s | maxRetries |
+      | ---------- | ---------- | ---------- |
+      | 0          | 1          | 1          |
+      | 1          | 2          | 2          |
+      | 2          | 4          | 3          |
+      | 3          | 8          | 4          |
+      | 4          | 16         | 5          |
+      | 5          | 32         | 6          |
+      | 6          | 64         | 7          |
+      | 7          | 128        | 8          |
+      | 8          | 256        | 9          |
+      | 9          | 512        | 10         |
+      | 10         | 1024       | 11         |
+      */
+      customBackoff: (retryCount) => Math.pow(2, retryCount) * 1000
+    }
+  };
+  return generateAwsConfig(account, Object.assign({}, config, configOverrides));
+};
+
 const fetchTemplateSummary = (account, url) => {
-  const cloudformation = new AWS.CloudFormation(generateAwsConfig(account, {apiVersion: '2010-05-15'}));
+  const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(account, {}));
   return cloudformation.getTemplateSummary({
     TemplateURL: url
   }).promise();
 };
 
 const detectTemplateDrift = async (account, stackRegion, stackName, templateId, templateVersion) => {
-  const cloudformation = new AWS.CloudFormation(generateAwsConfig(account, {
-    apiVersion: '2010-05-15',
-    region: stackRegion
-  }));
+  const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(account, {region: stackRegion}));
   if (templateVersion === undefined) {
     return undefined;
   } else {
@@ -125,10 +148,7 @@ const extractParentStacksFromParameters = (parameters) => {
 
 const fetchStacks = (account, region) => {
   const fetch = (previousStacks, nextToken) => {
-    const cloudformation = new AWS.CloudFormation(generateAwsConfig(account, {
-      apiVersion: '2010-05-15',
-      region: region
-    }));
+    const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(account, {region: region}));
     return cloudformation.describeStacks({
       NextToken: nextToken
     }).promise()
@@ -231,10 +251,7 @@ const yes = (stdconsole, stdin, question, alwaysYes) => {
 };
 
 const createChangeSet = async (stack) => {
-  const cloudformation = new AWS.CloudFormation(generateAwsConfig(stack.account, {
-    apiVersion: '2010-05-15',
-    region: stack.region
-  }));
+  const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(stack.account, {region: stack.region}));
   const changeSetName = `widdix-${crypto.randomBytes(16).toString('hex')}`;
   const templateURL = `https://s3-eu-west-1.amazonaws.com/widdix-aws-cf-templates-releases-eu-west-1/v${stack.templateLatestVersion}/${stack.templateId}.yaml`;
   const template = await fetchTemplateSummary(stack.account, templateURL);
@@ -287,10 +304,7 @@ const createChangeSet = async (stack) => {
 const timeout = async (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const tailStackEvents = async (stack, changeSetType, eventCallback) => {
-  const cloudformation = new AWS.CloudFormation(generateAwsConfig(stack.account, {
-    apiVersion: '2010-05-15',
-    region: stack.region
-  }));
+  const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(stack.account, {region: stack.region}));
   const publishedEventIds = new Set();
   const publishEvent = (event) => {
     publishedEventIds.add(event.EventId);
@@ -335,10 +349,7 @@ const tailStackEvents = async (stack, changeSetType, eventCallback) => {
 };
 
 const executeChangeSet = async (stack, changeSet, eventCallback) => {
-  const cloudformation = new AWS.CloudFormation(generateAwsConfig(stack.account, {
-    apiVersion: '2010-05-15',
-    region: stack.region
-  }));
+  const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(stack.account, {region: stack.region}));
   await cloudformation.executeChangeSet({
     ChangeSetName: changeSet.name,
     StackName: stack.name
