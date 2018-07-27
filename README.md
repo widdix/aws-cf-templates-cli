@@ -6,9 +6,17 @@
 
 ## Install
 
+We provide two ways to install `widdix`. Via `npm` or by downloading the binary manually.
+
+### npm
+
+If you have `npm` installed, run `npm install -g widdix`.
+
+### Binary
+
 Download the latest binary for your operating system: https://github.com/widdix/aws-cf-templates-cli/releases
 
-### MacOS
+#### MacOS
 
 ```
 chmod 755 widdix-macos
@@ -16,7 +24,7 @@ mv widdix-macos /usr/local/bin/widdix
 widdix -v
 ```
 
-### Linux
+#### Linux
 
 ```
 chmod 755 widdix-linux
@@ -24,7 +32,7 @@ mv widdix-linux /usr/local/bin/widdix
 widdix -v
 ```
 
-### Windows
+#### Windows
 
 TODO
 
