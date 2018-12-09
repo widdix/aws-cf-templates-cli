@@ -6,11 +6,17 @@
 
 ## Install
 
-We provide two ways to install `widdix`. Via `npm` or by downloading the binary manually.
+We provide three ways to install `widdix`. Via `npm`, Docker, or by downloading the binary manually.
 
 ### npm
 
 If you have `npm` installed, run `npm install -g widdix`.
+
+### Docker
+
+Docker image available on Ducker Hub [widdix/widdix](https://hub.docker.com/r/widdix/widdix/).
+
+Usage: `docker run -it --rm -v "$HOME/.aws:/root/.aws:ro" widdix/widdix list --all-profiles`
 
 ### Binary
 
