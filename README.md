@@ -10,7 +10,9 @@ We provide three ways to install `widdix`. Via `npm`, Docker, or by downloading 
 
 ### npm
 
-If you have `npm` installed, run `npm install -g widdix`.
+If you have `npx` installed (comes with `npm>=5.2.0`) you can prefix all `widdix` invocations with `npx`. E.g. `npx widdix list --all-profiles`.
+
+Or you can install `widdix` globally with `npm install -g widdix`.
 
 ### Docker
 
