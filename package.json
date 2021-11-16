@@ -5,7 +5,7 @@
   "author": "Michael Wittig <michael@widdix.de>",
   "license": "Apache-2.0",
   "dependencies": {
-    "aws-sdk": "2.373.0",
+    "aws-sdk": "2.814.0",
     "docopt": "0.6.2",
     "proxy-agent": "3.0.3",
     "requestretry": "3.1.0",
