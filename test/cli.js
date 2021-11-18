@@ -1,9 +1,8 @@
-'use strict';
+import { strict as assert } from 'assert';
+import nock from 'nock';
+import stdiomock from 'stdio-mock';
+import AWS from 'aws-sdk';
 
-const assert = require('assert');
-const nock = require('nock');
-const stdiomock = require('stdio-mock');
-const AWS = require('aws-sdk');
 
 nock.disableNetConnect();
 AWS.config.update({
@@ -13,10 +12,7 @@ AWS.config.update({
   maxRetries: 0
 });
 
-const cli = require('../cli.js');
-
-//const log = () => {};
-const log = console.info;
+import { clearCache, run } from '../cli.js';
 
 const generateEc2DescribeRegionsResponse = (regions) => {
   let xml = '<DescribeRegionsResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">';
@@ -250,18 +246,16 @@ const generateS3Reponse = () => {
 describe('cli', () => {
   afterEach(() => {
     nock.cleanAll();
-    cli.clearCache();
+    clearCache();
   });
   describe('list', () => {
     it('happy', (done) => {
       const github = nock('https://github.com')
         .get('/widdix/aws-cf-templates/releases.atom')
-        .reply(200, generateGitHubResponse('6.13.0'), {'Content-Type': 'application/xml'})
-        .log(log);
+        .reply(200, generateGitHubResponse('6.13.0'), {'Content-Type': 'application/xml'});
       const ec2 = nock('https://ec2.us-east-1.amazonaws.com')
         .post('/')
-        .reply(200, generateEc2DescribeRegionsResponse(['us-east-1']), {'Content-Type': 'application/xml'})
-        .log(log);
+        .reply(200, generateEc2DescribeRegionsResponse(['us-east-1']), {'Content-Type': 'application/xml'});
       const cloudformation = nock('https://cloudformation.us-east-1.amazonaws.com')
         .post('/', {
           Action: 'DescribeStacks',
@@ -281,28 +275,26 @@ describe('cli', () => {
           Version: '2010-05-15',
           StackName: 'MyStack'
         })
-        .reply(200, generateCloudFormationGetTemplateResponse(), {'Content-Type': 'application/xml'})
-        .log(log);
+        .reply(200, generateCloudFormationGetTemplateResponse(), {'Content-Type': 'application/xml'});
       const s3 = nock('https://widdix-aws-cf-templates-releases-eu-west-1.s3.amazonaws.com')
         .get('/v6.13.0/test/test.yaml')
-        .reply(200, generateS3Reponse())
-        .log(log);
+        .reply(200, generateS3Reponse());
 
       const {stdout, stdin, stderr} = stdiomock.stdio();
       stdout.columns = 300;
-      cli.run(['list'], stdout, stderr, stdin)
+      run(['list'], stdout, stderr, stdin)
         .then(() => {
-          assert.strictEqual(ec2.isDone(), true);
-          assert.strictEqual(github.isDone(), true);
-          assert.strictEqual(cloudformation.isDone(), true);
-          assert.strictEqual(s3.isDone(), true);
-          assert.strictEqual(stderr.data().length, 0);
+          assert.equal(ec2.isDone(), true);
+          assert.equal(github.isDone(), true);
+          assert.equal(cloudformation.isDone(), true);
+          assert.equal(s3.isDone(), true);
+          assert.equal(stderr.data().length, 0);
           const lines = stdout.data().join('').split('\n');
-          assert.strictEqual(lines.length, 6);
-          assert.strictEqual(lines[3].includes('us-east-1'), true);
-          assert.strictEqual(lines[3].includes('MyStack'), true);
-          assert.strictEqual(lines[3].includes('test'), true);
-          assert.strictEqual(lines[3].includes('6.13.0'), true);
+          assert.equal(lines.length, 6);
+          assert.equal(lines[3].includes('us-east-1'), true);
+          assert.equal(lines[3].includes('MyStack'), true);
+          assert.equal(lines[3].includes('test'), true);
+          assert.equal(lines[3].includes('6.13.0'), true);
           done();
         });
     });
@@ -312,12 +304,10 @@ describe('cli', () => {
       it('happy', (done) => {
         const github = nock('https://github.com')
           .get('/widdix/aws-cf-templates/releases.atom')
-          .reply(200, generateGitHubResponse('6.13.0'), {'Content-Type': 'application/xml'})
-          .log(log);
+          .reply(200, generateGitHubResponse('6.13.0'), {'Content-Type': 'application/xml'});
         const ec2 = nock('https://ec2.us-east-1.amazonaws.com')
           .post('/')
-          .reply(200, generateEc2DescribeRegionsResponse(['us-east-1']), {'Content-Type': 'application/xml'})
-          .log(log);
+          .reply(200, generateEc2DescribeRegionsResponse(['us-east-1']), {'Content-Type': 'application/xml'});
         const cloudformation = nock('https://cloudformation.us-east-1.amazonaws.com')
           .post('/', {
             Action: 'DescribeStacks',
@@ -389,12 +379,10 @@ describe('cli', () => {
             Version: '2010-05-15',
             StackName: 'MyStack'
           })
-          .reply(200, generateCloudFormationDescribeStackEventsResponse(), {'Content-Type': 'application/xml'})
-          .log(log);
+          .reply(200, generateCloudFormationDescribeStackEventsResponse(), {'Content-Type': 'application/xml'});
         const s3 = nock('https://widdix-aws-cf-templates-releases-eu-west-1.s3.amazonaws.com')
           .get('/v6.12.0/test/test.yaml')
-          .reply(200, generateS3Reponse())
-          .log(log);
+          .reply(200, generateS3Reponse());
 
         const {stdout, stdin, stderr} = stdiomock.stdio();
         stdout.columns = 300;
@@ -403,26 +391,26 @@ describe('cli', () => {
             stdin.write('y');
           }
         });
-        cli.run(['update', '--stack-name', 'MyStack'], stdout, stderr, stdin)
+        run(['update', '--stack-name', 'MyStack'], stdout, stderr, stdin)
           .then(() => {
-            assert.strictEqual(ec2.isDone(), true);
-            assert.strictEqual(github.isDone(), true);
-            assert.strictEqual(cloudformation.isDone(), true);
-            assert.strictEqual(s3.isDone(), true);
-            assert.strictEqual(stderr.data().length, 0);
+            assert.equal(ec2.isDone(), true);
+            assert.equal(github.isDone(), true);
+            assert.equal(cloudformation.isDone(), true);
+            assert.equal(s3.isDone(), true);
+            assert.equal(stderr.data().length, 0);
             const lines = stdout.data().join('').split('\n');
-            assert.strictEqual(lines.length, 16);
-            assert.strictEqual(lines[3].includes('us-east-1'), true);
-            assert.strictEqual(lines[3].includes('MyStack'), true);
-            assert.strictEqual(lines[3].includes('test'), true);
-            assert.strictEqual(lines[3].includes('Update'), true);
-            assert.strictEqual(lines[5].includes('Apply changes?'), true);
-            assert.strictEqual(lines[9].includes('MyStack'), true);
-            assert.strictEqual(lines[9].includes('AWS::CloudFormation::Stack'), true);
-            assert.strictEqual(lines[9].includes('UPDATE_IN_PROGRESS'), true);
-            assert.strictEqual(lines[13].includes('MyStack'), true);
-            assert.strictEqual(lines[13].includes('AWS::CloudFormation::Stack'), true);
-            assert.strictEqual(lines[13].includes('UPDATE_COMPLETE'), true);
+            assert.equal(lines.length, 16);
+            assert.equal(lines[3].includes('us-east-1'), true);
+            assert.equal(lines[3].includes('MyStack'), true);
+            assert.equal(lines[3].includes('test'), true);
+            assert.equal(lines[3].includes('Update'), true);
+            assert.equal(lines[5].includes('Apply changes?'), true);
+            assert.equal(lines[9].includes('MyStack'), true);
+            assert.equal(lines[9].includes('AWS::CloudFormation::Stack'), true);
+            assert.equal(lines[9].includes('UPDATE_IN_PROGRESS'), true);
+            assert.equal(lines[13].includes('MyStack'), true);
+            assert.equal(lines[13].includes('AWS::CloudFormation::Stack'), true);
+            assert.equal(lines[13].includes('UPDATE_COMPLETE'), true);
             done();
           });
       });

@@ -1,21 +1,20 @@
-'use strict';
+import crypto from 'crypto';
+import fs from 'fs';
+import console from 'console';
+import AWS from 'aws-sdk';
+import requestretry from 'requestretry';
+import docopt from 'docopt';
+import semver from 'semver';
+import proxy from 'proxy-agent';
+import truncate from 'truncate-middle';
+import md5 from 'md5';
 
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
-const console = require('console');
-const AWS = require('aws-sdk');
-const requestretry = require('requestretry');
-const docopt = require('docopt');
-const semver = require('semver');
-const proxy = require('proxy-agent');
-const truncate = require('truncate-middle');
-const md5 = require('md5');
+import { create as gcreate } from './lib/graph.js';
+import { create as tcreate, print as tprint } from './lib/table.js';
+import { debug, warning, error, setLevel } from './lib/log.js';
+import { fetchProfiles } from './lib/aws-credentials.js';
 
-const graphlib = require('./lib/graph.js');
-const tablelib = require('./lib/table.js');
-const loglib = require('./lib/log.js');
-const awscredslib = require('./lib/aws-credentials.js');
+const { version } = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), {encoding: 'utf8'}));
 
 const generateAwsConfig = (account, configOverrides) => {
   return Object.assign({}, account.config, configOverrides);
@@ -122,7 +121,7 @@ const fetchLatestTemplateVersion = async (input) => {
 const extractTemplateIDFromStack = (stack) => {
   const templateId = stack.Outputs.find((output) => output.OutputKey === 'TemplateID').OutputValue;
   if (templateId === undefined) {
-    loglib.warning(`can not extract template id in ${stack.Region} for stack ${stack.StackName}`, stack);
+    warning(`can not extract template id in ${stack.Region} for stack ${stack.StackName}`, stack);
   }
   return templateId;
 };
@@ -130,7 +129,7 @@ const extractTemplateIDFromStack = (stack) => {
 const extractTemplateVersionFromStack = (templateId, stack) => {
   const output = stack.Outputs.find((output) => output.OutputKey === 'TemplateVersion');
   if (output === undefined || output.OutputValue === '__VERSION__') {
-    loglib.warning(`can not extract template version in ${stack.Region} for stack ${stack.StackName} (${templateId})`, stack);
+    warning(`can not extract template version in ${stack.Region} for stack ${stack.StackName} (${templateId})`, stack);
     return undefined;
   }
   return output.OutputValue;
@@ -189,16 +188,16 @@ const enrichStack = async (account, stack, input) => {
     try {
       return semver.gt(latestVersion, templateVersion);
     } catch (e) {
-      loglib.warning(`can not compare latest template version (v${latestVersion}) in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
+      warning(`can not compare latest template version (v${latestVersion}) in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
       return undefined;
     }    
   };
   const latestVersion = await fetchLatestTemplateVersion(input).catch(e => {
-    loglib.warning(`can not get latest template version in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
+    warning(`can not get latest template version in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
     return undefined;
   });
   const templateDrift = await detectTemplateDrift(account, stack.Region, stack.StackName, templateId, templateVersion).catch(e => {
-    loglib.warning(`can not get detect template drift in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
+    warning(`can not get detect template drift in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
     return undefined;
   });
   return {
@@ -266,7 +265,7 @@ const createChangeSet = async (stack) => {
     ChangeSetName: changeSetName,
     StackName: stack.name,
     ChangeSetType: 'UPDATE',
-    Description: `widdix-v${require('./package.json').version}`,
+    Description: `widdix-v${version}`,
     Parameters: Object.keys(parameters).map(key => {
       const parameter = parameters[key];
       const ret ={
@@ -398,7 +397,7 @@ const enrichAwsAccount = async (account) => {
     const callerIdentityData = await sts.getCallerIdentity({}).promise();
     accountId = callerIdentityData.Account;
   } catch (e) {
-    loglib.warning(`can not enrich account ${account.label} of type ${account.type} with id`, e);
+    warning(`can not enrich account ${account.label} of type ${account.type} with id`, e);
   }
   try {
     const accountAliasesData = await iam.listAccountAliases({}).promise();
@@ -406,7 +405,7 @@ const enrichAwsAccount = async (account) => {
       accountAlias = accountAliasesData.AccountAliases[0];
     }
   } catch (e) {
-    loglib.warning(`can not enrich account ${account.label} of type ${account.type} with alias`, e);
+    warning(`can not enrich account ${account.label} of type ${account.type} with alias`, e);
   } 
   return Object.assign({}, account, {alias: accountAlias, id: accountId});
 };
@@ -421,7 +420,7 @@ const fetchAwsAccounts = async (stdconsole, stdin, input) => {
       }
     })];
   } else if (input['--profile'] !== null || input['--all-profiles'] === true) {
-    const profiles = await awscredslib.fetchProfiles();
+    const profiles = await fetchProfiles();
     const accounts = [];
     const keys = Object.keys(profiles);
     for (const key of keys) {
@@ -459,7 +458,7 @@ const fetchAwsAccounts = async (stdconsole, stdin, input) => {
           const sessionTokenCredentials = await createSessionTokenCredentials(stdconsole, stdin, masterCredentials, profile.mfa_serial);
           const params = {
             RoleArn: profile.role_arn,
-            RoleSessionName: `widdix-v${require('./package.json').version}`,
+            RoleSessionName: `widdix-v${version}`,
             DurationSeconds: 15 * 60 // TODO make timeout of 15 minutes configurable
           };
           if ('external_id' in profile) {
@@ -476,10 +475,10 @@ const fetchAwsAccounts = async (stdconsole, stdin, input) => {
               }
             }));
           } catch (e) {
-            loglib.warning(`can not assume role for account profile ${key} of type role-mfa`, e);
+            warning(`can not assume role for account profile ${key} of type role-mfa`, e);
           }
         } catch (e) {
-          loglib.warning(`can not get session token for account profile ${key} of type role-mfa`, e);
+          warning(`can not get session token for account profile ${key} of type role-mfa`, e);
         }
       } else if ('role_arn' in profile && 'source_profile' in profile) {
         const sourceProfile = profiles[profile.source_profile];
@@ -493,7 +492,7 @@ const fetchAwsAccounts = async (stdconsole, stdin, input) => {
         const masterCredentials = new AWS.Credentials(masterParams);
         const params = {
           RoleArn: profile.role_arn,
-          RoleSessionName: `widdix-v${require('./package.json').version}`,
+          RoleSessionName: `widdix-v${version}`,
           DurationSeconds: 15 * 60 // TODO make timeout of 15 minutes configurable
         };
         if ('external_id' in profile) {
@@ -510,7 +509,7 @@ const fetchAwsAccounts = async (stdconsole, stdin, input) => {
             }
           }));
         } catch (e) {
-          loglib.warning(`can not assume role for account profile ${key} of type role`, e);
+          warning(`can not assume role for account profile ${key} of type role`, e);
         }
       }
     }
@@ -531,10 +530,10 @@ const fetchAwsAccounts = async (stdconsole, stdin, input) => {
   }
 };
 
-module.exports.clearCache = () => {
+export function clearCache() {
   downloadFileCache.clear();
   sessionTokenCredentialsCache.clear();
-};
+}
 
 const displayAccount = (account) => {
   if (account.alias !== null) {
@@ -546,28 +545,28 @@ const displayAccount = (account) => {
   return `${account.label} of type ${account.type}`;
 };
 
-module.exports.run = async (argv, stdout, stderr, stdin) => {
-  const cli = fs.readFileSync(path.join(__dirname, 'cli.txt'), {encoding: 'utf8'});
+export async function run(argv, stdout, stderr, stdin) {
+  const cli = fs.readFileSync(new URL('./cli.txt', import.meta.url), {encoding: 'utf8'});
   const stdconsole = new console.Console(stdout, stderr);
   const input = docopt.docopt(cli, {
-    version: require('./package.json').version,
+    version,
     argv: argv
   });
 
   if (input['--debug'] === true) {
-    loglib.setLevel('debug');
+    setLevel('debug');
   } else {
-    loglib.setLevel('info');
+    setLevel('info');
   }
 
   AWS.config.update({
     logger: {
-      log: (message, data) => loglib.debug(message, data)
+      log: (message, data) => debug(message, data)
     }
   });
 
   if ('HTTPS_PROXY' in process.env) {
-    loglib.debug(`using https proxy ${process.env.HTTPS_PROXY}`);
+    debug(`using https proxy ${process.env.HTTPS_PROXY}`);
     AWS.config.update({
       httpOptions: {agent: proxy(process.env.HTTPS_PROXY)}
     });
@@ -595,16 +594,16 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
         });
         rows.push(...accountRows);
       } catch (err) {
-        loglib.error(`can not access account ${account.label} of type ${account.type}`, err);
+        error(`can not access account ${account.label} of type ${account.type}`, err);
       }
     }
-    tablelib.print(stdconsole, stdout.columns, ['Stack Account', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Template Drift'], rows);
+    tprint(stdconsole, stdout.columns, ['Stack Account', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Template Drift'], rows);
   } else if (input.graph === true) {
     const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
     const intelligentLabelShortening = (label) => {
       return truncate(label, 12, 12, '...');
     };
-    const groot = graphlib.create('root', `widdix-v${require('./package.json').version}`);
+    const groot = gcreate('root', `widdix-v${version}`);
     for (const account of accounts) {
       try {
         const stacks = await fetchAllStacks(account, input);
@@ -627,7 +626,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
           });
         });
       } catch (err) {
-        loglib.error(`can not access account ${account.label} of type ${account.type}`, err);
+        error(`can not access account ${account.label} of type ${account.type}`, err);
       }
     }
     stdconsole.log(groot.toDOT());
@@ -648,7 +647,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
         return stacks;
       } else {
         const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
-        const g = graphlib.create('root', `widdix-v${require('./package.json').version}`);
+        const g = gcreate('root', `widdix-v${version}`);
         for (const account of accounts) {
           const stacksRandomOrder = await fetchAllStacks(account, input);
           stacksRandomOrder.forEach(stack => {
@@ -704,9 +703,9 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
         rows.push(row);
       });
     });
-    tablelib.print(stdconsole, stdout.columns, ['Stack Account', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Resource Type', 'Resource Id', 'Resource Action'], rows);
+    tprint(stdconsole, stdout.columns, ['Stack Account', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Resource Type', 'Resource Id', 'Resource Action'], rows);
     await yes(stdconsole, stdin, 'Apply changes?', input['--yes']);
-    const eventTable = tablelib.create(['Time', 'Status', 'Type', 'Logical ID', 'Status Reason'], []);
+    const eventTable = tcreate(['Time', 'Status', 'Type', 'Logical ID', 'Status Reason'], []);
     eventTable.printHeader(stdconsole, stdout.columns);
     for (const {stack, changeSet} of stacksAndChangeSets) {
       await executeChangeSet(stack, changeSet, (event) => {
@@ -715,5 +714,4 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
     }
     eventTable.printFooter(stdconsole, stdout.columns);
   }
-};
-
+}
