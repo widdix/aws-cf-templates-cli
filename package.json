@@ -29,7 +29,7 @@
   },
   "scripts": {
     "test": "eslint . && mocha -t 10000 test/*.js",
-    "package": "pkg package.json --targets node8-linux-x64,node8-macos-x64,node8-win-x64"
+    "package": "pkg package.json --targets node16-linux-x64,node16-macos-x64,node16-win-x64"
   },
   "bin": "index.js",
   "pkg": {

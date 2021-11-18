@@ -345,13 +345,15 @@ describe('cli', () => {
             Action: 'CreateChangeSet',
             Version: '2010-05-15',
             Capabilities: {
-              member: ['CAPABILITY_IAM']
+              // eslint-disable-next-line no-sparse-arrays
+              member: [, 'CAPABILITY_IAM']
             },
             ChangeSetName: /.*/,
             ChangeSetType: 'UPDATE',
             Description: /.*/,
             Parameters: {
-              member: [{
+              // eslint-disable-next-line no-sparse-arrays
+              member: [, {
                 ParameterKey: 'NameA',
                 ParameterValue: 'x'
               }]
