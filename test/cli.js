@@ -1,20 +1,10 @@
 import { strict as assert } from 'assert';
 import nock from 'nock';
 import stdiomock from 'stdio-mock';
-import AWS from 'aws-sdk';
-
-
-nock.disableNetConnect();
-AWS.config.update({
-  region: 'us-east-1',
-  accessKeyId: 'AKID',
-  secretAccessKey: 'SECRET',
-  maxRetries: 0
-});
 
 import { clearCache, run } from '../cli.js';
 
-const generateEc2DescribeRegionsResponse = (regions) => {
+function generateEc2DescribeRegionsResponse(regions) {
   let xml = '<DescribeRegionsResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">';
   xml += '<requestId>b9b4b068-3a41-11e5-94eb-example</requestId>';
   xml += '<regionInfo>';
@@ -27,13 +17,13 @@ const generateEc2DescribeRegionsResponse = (regions) => {
   xml += '</regionInfo>';
   xml += '</DescribeRegionsResponse>';
   return xml;
-};
+}
 
-const generateGitHubResponse = (version) => {
+function generateGitHubResponse(version) {
   return `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US"><entry><title>v${version}</title></entry></feed>`;
-};
+}
 
-const generateCloudFormationDescribeStacksResponse = (stacks) => {
+function generateCloudFormationDescribeStacksResponse(stacks) {
   let xml = '<DescribeStacksResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<DescribeStacksResult>';
   xml += '<Stacks>';
@@ -43,6 +33,8 @@ const generateCloudFormationDescribeStacksResponse = (stacks) => {
     xml += `<StackId>arn:aws:cloudformation:us-east-1:123456789:stack/${stack.name}/aaf549a0-a413-11df-adb3-5081b3858e83</StackId>`;
     xml += `<Description>${stack.description}</Description>`;
     xml += `<StackStatus>${stack.status}</StackStatus>`;
+    xml += '<Parameters>';
+    xml += '</Parameters>';
     xml += '<Outputs>';
     Object.keys(stack.outputs).forEach(key => {
       xml += '<member>';
@@ -58,9 +50,9 @@ const generateCloudFormationDescribeStacksResponse = (stacks) => {
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</DescribeStacksResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationGetTemplateSummaryResponse = (template) => {
+function generateCloudFormationGetTemplateSummaryResponse(template) {
   let xml = '<GetTemplateSummaryResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<GetTemplateSummaryResult>';
   xml += '<Description>A sample template description.</Description>';
@@ -85,9 +77,9 @@ const generateCloudFormationGetTemplateSummaryResponse = (template) => {
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</GetTemplateSummaryResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationDescribeChangeSetResponse = (changeSet) => {
+function generateCloudFormationDescribeChangeSetResponse(changeSet) {
   let xml = '<DescribeChangeSetResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<DescribeChangeSetResult>';
   xml += '<StackId>arn:aws:cloudformation:us-east-1:123456789012:stack/SampleStack/12a3b456-0e10-4ce0-9052-5d484a8c4e5b</StackId>';
@@ -98,7 +90,7 @@ const generateCloudFormationDescribeChangeSetResponse = (changeSet) => {
   xml += '<NotificationARNs/>';
   xml += '<CreationTime>2016-03-17T23:35:25.813Z</CreationTime>';
   xml += '<Capabilities/>';
-  /* TODO <Parameters>
+  /* <Parameters>
     <member>
       <ParameterValue>testing</ParameterValue>
       <ParameterKey>Purpose</ParameterKey>
@@ -111,9 +103,9 @@ const generateCloudFormationDescribeChangeSetResponse = (changeSet) => {
       <ParameterValue>t2.micro</ParameterValue>
       <ParameterKey>InstanceType</ParameterKey>
     </member>
-  </Parameters>
-  <Changes>
-    <member>
+  </Parameters>*/
+  xml += '<Changes>';
+  /*<member>
       <ResourceChange>
         <Replacement>False</Replacement>
         <Scope>
@@ -135,15 +127,15 @@ const generateCloudFormationDescribeChangeSetResponse = (changeSet) => {
         <ResourceType>AWS::EC2::Instance</ResourceType>
       </ResourceChange>
       <Type>Resource</Type>
-    </member>
-  </Changes>*/
+    </member>*/
+  xml += '</Changes>';
   xml += '</DescribeChangeSetResult>';
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</DescribeChangeSetResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationCreateChangeSetResponse = () => {
+function generateCloudFormationCreateChangeSetResponse() {
   let xml = '<CreateChangeSetResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<CreateChangeSetResult>';
   xml += '<Id>arn:aws:cloudformation:us-east-1:123456789012:changeSet/SampleChangeSet/12a3b456-0e10-4ce0-9052-5d484a8c4e5b</Id>';
@@ -151,17 +143,17 @@ const generateCloudFormationCreateChangeSetResponse = () => {
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</CreateChangeSetResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationExecuteChangeSetResponse = () => {
+function generateCloudFormationExecuteChangeSetResponse() {
   let xml = '<ExecuteChangeSetResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<ExecuteChangeSetResult/>';
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</ExecuteChangeSetResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationDescribeStackEventsResponse = () => {
+function generateCloudFormationDescribeStackEventsResponse() {
   let xml = '<DescribeStackEventsResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<DescribeStackEventsResult>';
   xml += '<StackEvents>';
@@ -225,9 +217,9 @@ const generateCloudFormationDescribeStackEventsResponse = () => {
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</DescribeStackEventsResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationGetTemplateResponse = () => {
+function generateCloudFormationGetTemplateResponse() {
   let xml = '<GetTemplateResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<GetTemplateResult>';
   xml += '<TemplateBody>';
@@ -237,11 +229,11 @@ const generateCloudFormationGetTemplateResponse = () => {
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</GetTemplateResponse>';
   return xml;
-};
+}
 
-const generateS3Reponse = () => {
+function generateS3Reponse() {
   return 'test';
-};
+}
 
 describe('cli', () => {
   afterEach(() => {
@@ -276,7 +268,7 @@ describe('cli', () => {
           StackName: 'MyStack'
         })
         .reply(200, generateCloudFormationGetTemplateResponse(), {'Content-Type': 'application/xml'});
-      const s3 = nock('https://widdix-aws-cf-templates-releases-eu-west-1.s3.amazonaws.com')
+      const s3 = nock('https://widdix-aws-cf-templates-releases-eu-west-1.s3.eu-west-1.amazonaws.com')
         .get('/v6.13.0/test/test.yaml')
         .reply(200, generateS3Reponse());
 
@@ -366,8 +358,9 @@ describe('cli', () => {
             Action: 'DescribeChangeSet',
             Version: '2010-05-15',
             ChangeSetName: /.*/,
-            StackName: /.*/
+            StackName: 'MyStack'
           })
+          .times(2)
           .reply(200, generateCloudFormationDescribeChangeSetResponse({status: 'CREATE_COMPLETE'}), {'Content-Type': 'application/xml'})
           .post('/', {
             Action: 'ExecuteChangeSet',
@@ -382,7 +375,7 @@ describe('cli', () => {
             StackName: 'MyStack'
           })
           .reply(200, generateCloudFormationDescribeStackEventsResponse(), {'Content-Type': 'application/xml'});
-        const s3 = nock('https://widdix-aws-cf-templates-releases-eu-west-1.s3.amazonaws.com')
+        const s3 = nock('https://widdix-aws-cf-templates-releases-eu-west-1.s3.eu-west-1.amazonaws.com')
           .get('/v6.12.0/test/test.yaml')
           .reply(200, generateS3Reponse());
 

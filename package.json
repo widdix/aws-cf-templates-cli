@@ -5,7 +5,12 @@
   "author": "Michael Wittig <michael@widdix.de>",
   "license": "Apache-2.0",
   "dependencies": {
-    "aws-sdk": "2.1031.0",
+    "@aws-sdk/client-cloudformation": "3.41.0",
+    "@aws-sdk/client-ec2": "3.41.0",
+    "@aws-sdk/client-iam": "3.41.0",
+    "@aws-sdk/client-sts": "3.41.0",
+    "@aws-sdk/credential-providers": "3.41.0",
+    "@aws-sdk/node-http-handler": "3.40.0",
     "docopt": "0.6.2",
     "md5": "2.3.0",
     "proxy-agent": "5.0.0",
@@ -24,7 +29,7 @@
     "stdio-mock": "1.1.0"
   },
   "scripts": {
-    "test": "eslint . && mocha -t 10000 test/*.js",
+    "test": "eslint . && AWS_ACCESS_KEY_ID=AKID AWS_SECRET_ACCESS_KEY=SECRET mocha -t 10000 test/*.js",
     "package": "pkg package.json --targets node16-linux-x64,node16-macos-x64,node16-win-x64"
   },
   "bin": "index.js",
