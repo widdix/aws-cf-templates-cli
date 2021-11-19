@@ -7,6 +7,7 @@ import semver from 'semver';
 import proxy from 'proxy-agent';
 import truncate from 'truncate-middle';
 import md5 from 'md5';
+import pLimit from 'p-limit';
 import { EC2Client, DescribeRegionsCommand } from '@aws-sdk/client-ec2';
 import {
   CloudFormationClient,
@@ -215,19 +216,18 @@ async function enrichStack(account, stack, input) {
 }
 
 async function fetchAllStacks(account, input) {
+  const limit = pLimit(4);
   return fetchRegions(account, input['--region'])
     .then(regions => Promise.all(regions.map(region => fetchStacks(account, region))))
     .then(stackLists => {
       return Promise.all(
         stackLists
-          .reduce((acc, stacks) => [...acc, ...stacks], [])
+          .flat()
           .filter(stack => !stack.StackName.startsWith('StackSet-'))
           .filter((stack) => {
             return stack.Outputs.some((output) => (output.OutputKey === 'TemplateID' && output.OutputValue.includes('/')));
           })
-          .map((stack) => {
-            return enrichStack(account, stack, input);
-          })
+          .map((stack) => limit(() => enrichStack(account, stack, input)))
       );
     });
 }
