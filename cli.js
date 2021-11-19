@@ -46,7 +46,7 @@ function generateAwsConfig(account, configOverrides) {
 function generateAwsCloudFormationConfig(account, configOverrides) {
   const config = {
     apiVersion: '2010-05-15',
-    maxAttempts: (process.pkg === true || process.env.NODE_ENV === 'production') ? 1 : 12
+    maxAttempts: process.env.NODE_ENV === 'production' ? 12 : 1
   };
   return generateAwsConfig(account, Object.assign({}, config, configOverrides));
 }

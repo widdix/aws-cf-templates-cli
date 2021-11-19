@@ -23,19 +23,14 @@
     "truncate-middle": "1.0.6"
   },
   "devDependencies": {
-    "pkg": "5.4.1",
     "eslint": "8.2.0",
     "mocha": "9.1.3",
     "nock": "13.2.1",
     "stdio-mock": "1.1.0"
   },
   "scripts": {
-    "test": "eslint . && AWS_ACCESS_KEY_ID=AKID AWS_SECRET_ACCESS_KEY=SECRET mocha -t 10000 test/*.js",
-    "package": "pkg package.json --targets node16-linux-x64,node16-macos-x64,node16-win-x64"
+    "test": "eslint . && NODE_ENV=development AWS_ACCESS_KEY_ID=AKID AWS_SECRET_ACCESS_KEY=SECRET mocha -t 10000 test/*.js"
   },
   "bin": "index.js",
-  "pkg": {
-    "assets": "cli.tx"
-  },
   "type": "module"
 }

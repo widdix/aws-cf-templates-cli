@@ -22,27 +22,7 @@ Usage: `docker run -it --rm -v "$HOME/.aws:/root/.aws:ro" widdix/widdix list --a
 
 ### Binary
 
-Download the latest binary for your operating system: https://github.com/widdix/aws-cf-templates-cli/releases
-
-#### MacOS
-
-```
-chmod 755 widdix-macos
-mv widdix-macos /usr/local/bin/widdix
-widdix -v
-```
-
-#### Linux
-
-```
-chmod 755 widdix-linux
-mv widdix-linux /usr/local/bin/widdix
-widdix -v
-```
-
-#### Windows
-
-TODO
+> We don't provide binaries any longer since [pkg](https://www.npmjs.com/package/pkg) does not support ESM.
 
 ## AWS Authorization & Authentication (IAM)
 
