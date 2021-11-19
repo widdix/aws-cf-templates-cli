@@ -1,35 +1,36 @@
 {
   "name": "widdix",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A CLI tool to manage Free Templates for AWS CloudFormation",
   "author": "Michael Wittig <michael@widdix.de>",
   "license": "Apache-2.0",
   "dependencies": {
-    "aws-sdk": "2.373.0",
+    "@aws-sdk/client-cloudformation": "3.41.0",
+    "@aws-sdk/client-ec2": "3.41.0",
+    "@aws-sdk/client-iam": "3.41.0",
+    "@aws-sdk/client-sts": "3.41.0",
+    "@aws-sdk/credential-providers": "3.41.0",
+    "@aws-sdk/node-http-handler": "3.40.0",
     "docopt": "0.6.2",
-    "proxy-agent": "3.0.3",
-    "requestretry": "3.1.0",
-    "request": "2.88.0",
-    "semver": "5.6.0",
-    "truncate-middle": "1.0.6",
-    "md5": "2.2.1",
-    "simple-node-logger": "0.93.40",
-    "serialize-error": "3.0.0"
+    "md5": "2.3.0",
+    "p-limit": "4.0.0",
+    "proxy-agent": "5.0.0",
+    "request": "2.88.2",
+    "requestretry": "6.0.0",
+    "semver": "7.3.5",
+    "serialize-error": "9.0.0",
+    "simple-node-logger": "21.8.12",
+    "truncate-middle": "1.0.6"
   },
   "devDependencies": {
-    "pkg": "4.3.5",
-    "eslint": "5.10.0",
-    "istanbul": "0.4.5",
-    "mocha": "5.2.0",
-    "nock": "10.0.4",
+    "eslint": "8.2.0",
+    "mocha": "9.1.3",
+    "nock": "13.2.1",
     "stdio-mock": "1.1.0"
   },
   "scripts": {
-    "test": "eslint . && mocha -t 10000 test/*.js",
-    "package": "pkg package.json --targets node8-linux-x64,node8-macos-x64,node8-win-x64"
+    "test": "eslint . && NODE_ENV=development AWS_ACCESS_KEY_ID=AKID AWS_SECRET_ACCESS_KEY=SECRET mocha -t 10000 test/*.js"
   },
   "bin": "index.js",
-  "pkg": {
-    "assets": "cli.tx"
-  }
+  "type": "module"
 }

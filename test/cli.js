@@ -1,24 +1,10 @@
-'use strict';
+import { strict as assert } from 'assert';
+import nock from 'nock';
+import stdiomock from 'stdio-mock';
 
-const assert = require('assert');
-const nock = require('nock');
-const stdiomock = require('stdio-mock');
-const AWS = require('aws-sdk');
+import { clearCache, run } from '../cli.js';
 
-nock.disableNetConnect();
-AWS.config.update({
-  region: 'us-east-1',
-  accessKeyId: 'AKID',
-  secretAccessKey: 'SECRET',
-  maxRetries: 0
-});
-
-const cli = require('../cli.js');
-
-//const log = () => {};
-const log = console.info;
-
-const generateEc2DescribeRegionsResponse = (regions) => {
+function generateEc2DescribeRegionsResponse(regions) {
   let xml = '<DescribeRegionsResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">';
   xml += '<requestId>b9b4b068-3a41-11e5-94eb-example</requestId>';
   xml += '<regionInfo>';
@@ -31,13 +17,13 @@ const generateEc2DescribeRegionsResponse = (regions) => {
   xml += '</regionInfo>';
   xml += '</DescribeRegionsResponse>';
   return xml;
-};
+}
 
-const generateGitHubResponse = (version) => {
+function generateGitHubResponse(version) {
   return `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US"><entry><title>v${version}</title></entry></feed>`;
-};
+}
 
-const generateCloudFormationDescribeStacksResponse = (stacks) => {
+function generateCloudFormationDescribeStacksResponse(stacks) {
   let xml = '<DescribeStacksResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<DescribeStacksResult>';
   xml += '<Stacks>';
@@ -47,6 +33,8 @@ const generateCloudFormationDescribeStacksResponse = (stacks) => {
     xml += `<StackId>arn:aws:cloudformation:us-east-1:123456789:stack/${stack.name}/aaf549a0-a413-11df-adb3-5081b3858e83</StackId>`;
     xml += `<Description>${stack.description}</Description>`;
     xml += `<StackStatus>${stack.status}</StackStatus>`;
+    xml += '<Parameters>';
+    xml += '</Parameters>';
     xml += '<Outputs>';
     Object.keys(stack.outputs).forEach(key => {
       xml += '<member>';
@@ -62,9 +50,9 @@ const generateCloudFormationDescribeStacksResponse = (stacks) => {
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</DescribeStacksResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationGetTemplateSummaryResponse = (template) => {
+function generateCloudFormationGetTemplateSummaryResponse(template) {
   let xml = '<GetTemplateSummaryResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<GetTemplateSummaryResult>';
   xml += '<Description>A sample template description.</Description>';
@@ -89,9 +77,9 @@ const generateCloudFormationGetTemplateSummaryResponse = (template) => {
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</GetTemplateSummaryResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationDescribeChangeSetResponse = (changeSet) => {
+function generateCloudFormationDescribeChangeSetResponse(changeSet) {
   let xml = '<DescribeChangeSetResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<DescribeChangeSetResult>';
   xml += '<StackId>arn:aws:cloudformation:us-east-1:123456789012:stack/SampleStack/12a3b456-0e10-4ce0-9052-5d484a8c4e5b</StackId>';
@@ -102,7 +90,7 @@ const generateCloudFormationDescribeChangeSetResponse = (changeSet) => {
   xml += '<NotificationARNs/>';
   xml += '<CreationTime>2016-03-17T23:35:25.813Z</CreationTime>';
   xml += '<Capabilities/>';
-  /* TODO <Parameters>
+  /* <Parameters>
     <member>
       <ParameterValue>testing</ParameterValue>
       <ParameterKey>Purpose</ParameterKey>
@@ -115,9 +103,9 @@ const generateCloudFormationDescribeChangeSetResponse = (changeSet) => {
       <ParameterValue>t2.micro</ParameterValue>
       <ParameterKey>InstanceType</ParameterKey>
     </member>
-  </Parameters>
-  <Changes>
-    <member>
+  </Parameters>*/
+  xml += '<Changes>';
+  /*<member>
       <ResourceChange>
         <Replacement>False</Replacement>
         <Scope>
@@ -139,15 +127,15 @@ const generateCloudFormationDescribeChangeSetResponse = (changeSet) => {
         <ResourceType>AWS::EC2::Instance</ResourceType>
       </ResourceChange>
       <Type>Resource</Type>
-    </member>
-  </Changes>*/
+    </member>*/
+  xml += '</Changes>';
   xml += '</DescribeChangeSetResult>';
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</DescribeChangeSetResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationCreateChangeSetResponse = () => {
+function generateCloudFormationCreateChangeSetResponse() {
   let xml = '<CreateChangeSetResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<CreateChangeSetResult>';
   xml += '<Id>arn:aws:cloudformation:us-east-1:123456789012:changeSet/SampleChangeSet/12a3b456-0e10-4ce0-9052-5d484a8c4e5b</Id>';
@@ -155,17 +143,17 @@ const generateCloudFormationCreateChangeSetResponse = () => {
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</CreateChangeSetResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationExecuteChangeSetResponse = () => {
+function generateCloudFormationExecuteChangeSetResponse() {
   let xml = '<ExecuteChangeSetResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<ExecuteChangeSetResult/>';
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</ExecuteChangeSetResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationDescribeStackEventsResponse = () => {
+function generateCloudFormationDescribeStackEventsResponse() {
   let xml = '<DescribeStackEventsResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<DescribeStackEventsResult>';
   xml += '<StackEvents>';
@@ -229,9 +217,9 @@ const generateCloudFormationDescribeStackEventsResponse = () => {
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</DescribeStackEventsResponse>';
   return xml;
-};
+}
 
-const generateCloudFormationGetTemplateResponse = () => {
+function generateCloudFormationGetTemplateResponse() {
   let xml = '<GetTemplateResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">';
   xml += '<GetTemplateResult>';
   xml += '<TemplateBody>';
@@ -241,27 +229,25 @@ const generateCloudFormationGetTemplateResponse = () => {
   xml += '<ResponseMetadata><RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId></ResponseMetadata>';
   xml += '</GetTemplateResponse>';
   return xml;
-};
+}
 
-const generateS3Reponse = () => {
+function generateS3Reponse() {
   return 'test';
-};
+}
 
 describe('cli', () => {
   afterEach(() => {
     nock.cleanAll();
-    cli.clearCache();
+    clearCache();
   });
   describe('list', () => {
     it('happy', (done) => {
       const github = nock('https://github.com')
         .get('/widdix/aws-cf-templates/releases.atom')
-        .reply(200, generateGitHubResponse('6.13.0'), {'Content-Type': 'application/xml'})
-        .log(log);
+        .reply(200, generateGitHubResponse('6.13.0'), {'Content-Type': 'application/xml'});
       const ec2 = nock('https://ec2.us-east-1.amazonaws.com')
         .post('/')
-        .reply(200, generateEc2DescribeRegionsResponse(['us-east-1']), {'Content-Type': 'application/xml'})
-        .log(log);
+        .reply(200, generateEc2DescribeRegionsResponse(['us-east-1']), {'Content-Type': 'application/xml'});
       const cloudformation = nock('https://cloudformation.us-east-1.amazonaws.com')
         .post('/', {
           Action: 'DescribeStacks',
@@ -281,28 +267,26 @@ describe('cli', () => {
           Version: '2010-05-15',
           StackName: 'MyStack'
         })
-        .reply(200, generateCloudFormationGetTemplateResponse(), {'Content-Type': 'application/xml'})
-        .log(log);
-      const s3 = nock('https://widdix-aws-cf-templates-releases-eu-west-1.s3.amazonaws.com')
+        .reply(200, generateCloudFormationGetTemplateResponse(), {'Content-Type': 'application/xml'});
+      const s3 = nock('https://widdix-aws-cf-templates-releases-eu-west-1.s3.eu-west-1.amazonaws.com')
         .get('/v6.13.0/test/test.yaml')
-        .reply(200, generateS3Reponse())
-        .log(log);
+        .reply(200, generateS3Reponse());
 
       const {stdout, stdin, stderr} = stdiomock.stdio();
       stdout.columns = 300;
-      cli.run(['list'], stdout, stderr, stdin)
+      run(['list'], stdout, stderr, stdin)
         .then(() => {
-          assert.strictEqual(ec2.isDone(), true);
-          assert.strictEqual(github.isDone(), true);
-          assert.strictEqual(cloudformation.isDone(), true);
-          assert.strictEqual(s3.isDone(), true);
-          assert.strictEqual(stderr.data().length, 0);
+          assert.equal(ec2.isDone(), true);
+          assert.equal(github.isDone(), true);
+          assert.equal(cloudformation.isDone(), true);
+          assert.equal(s3.isDone(), true);
+          assert.equal(stderr.data().length, 0);
           const lines = stdout.data().join('').split('\n');
-          assert.strictEqual(lines.length, 6);
-          assert.strictEqual(lines[3].includes('us-east-1'), true);
-          assert.strictEqual(lines[3].includes('MyStack'), true);
-          assert.strictEqual(lines[3].includes('test'), true);
-          assert.strictEqual(lines[3].includes('6.13.0'), true);
+          assert.equal(lines.length, 6);
+          assert.equal(lines[3].includes('us-east-1'), true);
+          assert.equal(lines[3].includes('MyStack'), true);
+          assert.equal(lines[3].includes('test'), true);
+          assert.equal(lines[3].includes('6.13.0'), true);
           done();
         });
     });
@@ -312,12 +296,10 @@ describe('cli', () => {
       it('happy', (done) => {
         const github = nock('https://github.com')
           .get('/widdix/aws-cf-templates/releases.atom')
-          .reply(200, generateGitHubResponse('6.13.0'), {'Content-Type': 'application/xml'})
-          .log(log);
+          .reply(200, generateGitHubResponse('6.13.0'), {'Content-Type': 'application/xml'});
         const ec2 = nock('https://ec2.us-east-1.amazonaws.com')
           .post('/')
-          .reply(200, generateEc2DescribeRegionsResponse(['us-east-1']), {'Content-Type': 'application/xml'})
-          .log(log);
+          .reply(200, generateEc2DescribeRegionsResponse(['us-east-1']), {'Content-Type': 'application/xml'});
         const cloudformation = nock('https://cloudformation.us-east-1.amazonaws.com')
           .post('/', {
             Action: 'DescribeStacks',
@@ -355,13 +337,15 @@ describe('cli', () => {
             Action: 'CreateChangeSet',
             Version: '2010-05-15',
             Capabilities: {
-              member: ['CAPABILITY_IAM']
+              // eslint-disable-next-line no-sparse-arrays
+              member: [, 'CAPABILITY_IAM']
             },
             ChangeSetName: /.*/,
             ChangeSetType: 'UPDATE',
             Description: /.*/,
             Parameters: {
-              member: [{
+              // eslint-disable-next-line no-sparse-arrays
+              member: [, {
                 ParameterKey: 'NameA',
                 ParameterValue: 'x'
               }]
@@ -374,8 +358,9 @@ describe('cli', () => {
             Action: 'DescribeChangeSet',
             Version: '2010-05-15',
             ChangeSetName: /.*/,
-            StackName: /.*/
+            StackName: 'MyStack'
           })
+          .times(2)
           .reply(200, generateCloudFormationDescribeChangeSetResponse({status: 'CREATE_COMPLETE'}), {'Content-Type': 'application/xml'})
           .post('/', {
             Action: 'ExecuteChangeSet',
@@ -389,12 +374,10 @@ describe('cli', () => {
             Version: '2010-05-15',
             StackName: 'MyStack'
           })
-          .reply(200, generateCloudFormationDescribeStackEventsResponse(), {'Content-Type': 'application/xml'})
-          .log(log);
-        const s3 = nock('https://widdix-aws-cf-templates-releases-eu-west-1.s3.amazonaws.com')
+          .reply(200, generateCloudFormationDescribeStackEventsResponse(), {'Content-Type': 'application/xml'});
+        const s3 = nock('https://widdix-aws-cf-templates-releases-eu-west-1.s3.eu-west-1.amazonaws.com')
           .get('/v6.12.0/test/test.yaml')
-          .reply(200, generateS3Reponse())
-          .log(log);
+          .reply(200, generateS3Reponse());
 
         const {stdout, stdin, stderr} = stdiomock.stdio();
         stdout.columns = 300;
@@ -403,26 +386,26 @@ describe('cli', () => {
             stdin.write('y');
           }
         });
-        cli.run(['update', '--stack-name', 'MyStack'], stdout, stderr, stdin)
+        run(['update', '--stack-name', 'MyStack'], stdout, stderr, stdin)
           .then(() => {
-            assert.strictEqual(ec2.isDone(), true);
-            assert.strictEqual(github.isDone(), true);
-            assert.strictEqual(cloudformation.isDone(), true);
-            assert.strictEqual(s3.isDone(), true);
-            assert.strictEqual(stderr.data().length, 0);
+            assert.equal(ec2.isDone(), true);
+            assert.equal(github.isDone(), true);
+            assert.equal(cloudformation.isDone(), true);
+            assert.equal(s3.isDone(), true);
+            assert.equal(stderr.data().length, 0);
             const lines = stdout.data().join('').split('\n');
-            assert.strictEqual(lines.length, 16);
-            assert.strictEqual(lines[3].includes('us-east-1'), true);
-            assert.strictEqual(lines[3].includes('MyStack'), true);
-            assert.strictEqual(lines[3].includes('test'), true);
-            assert.strictEqual(lines[3].includes('Update'), true);
-            assert.strictEqual(lines[5].includes('Apply changes?'), true);
-            assert.strictEqual(lines[9].includes('MyStack'), true);
-            assert.strictEqual(lines[9].includes('AWS::CloudFormation::Stack'), true);
-            assert.strictEqual(lines[9].includes('UPDATE_IN_PROGRESS'), true);
-            assert.strictEqual(lines[13].includes('MyStack'), true);
-            assert.strictEqual(lines[13].includes('AWS::CloudFormation::Stack'), true);
-            assert.strictEqual(lines[13].includes('UPDATE_COMPLETE'), true);
+            assert.equal(lines.length, 16);
+            assert.equal(lines[3].includes('us-east-1'), true);
+            assert.equal(lines[3].includes('MyStack'), true);
+            assert.equal(lines[3].includes('test'), true);
+            assert.equal(lines[3].includes('Update'), true);
+            assert.equal(lines[5].includes('Apply changes?'), true);
+            assert.equal(lines[9].includes('MyStack'), true);
+            assert.equal(lines[9].includes('AWS::CloudFormation::Stack'), true);
+            assert.equal(lines[9].includes('UPDATE_IN_PROGRESS'), true);
+            assert.equal(lines[13].includes('MyStack'), true);
+            assert.equal(lines[13].includes('AWS::CloudFormation::Stack'), true);
+            assert.equal(lines[13].includes('UPDATE_COMPLETE'), true);
             done();
           });
       });

@@ -1,91 +1,86 @@
-'use strict';
+import crypto from 'crypto';
+import fs from 'fs';
+import console from 'console';
+import requestretry from 'requestretry';
+import docopt from 'docopt';
+import semver from 'semver';
+import proxy from 'proxy-agent';
+import truncate from 'truncate-middle';
+import md5 from 'md5';
+import pLimit from 'p-limit';
+import { EC2Client, DescribeRegionsCommand } from '@aws-sdk/client-ec2';
+import {
+  CloudFormationClient,
+  GetTemplateSummaryCommand,
+  GetTemplateCommand,
+  DescribeChangeSetCommand,
+  CreateChangeSetCommand,
+  ExecuteChangeSetCommand,
+  paginateDescribeStacks,
+  paginateDescribeStackEvents,
+  waitUntilChangeSetCreateComplete
+} from '@aws-sdk/client-cloudformation';
+import { IAMClient, ListAccountAliasesCommand } from '@aws-sdk/client-iam';
+import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
+import { fromIni, fromEnv } from '@aws-sdk/credential-providers';
+import { NodeHttpHandler } from '@aws-sdk/node-http-handler'; 
 
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
-const console = require('console');
-const AWS = require('aws-sdk');
-const requestretry = require('requestretry');
-const docopt = require('docopt');
-const semver = require('semver');
-const proxy = require('proxy-agent');
-const truncate = require('truncate-middle');
-const md5 = require('md5');
+import { create as gcreate } from './lib/graph.js';
+import { create as tcreate, print as tprint } from './lib/table.js';
+import { warning, error, setLevel } from './lib/log.js';
+import { fetchProfiles } from './lib/aws-credentials.js';
 
-const graphlib = require('./lib/graph.js');
-const tablelib = require('./lib/table.js');
-const loglib = require('./lib/log.js');
-const awscredslib = require('./lib/aws-credentials.js');
+const { version } = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), {encoding: 'utf8'}));
 
-const generateAwsConfig = (account, configOverrides) => {
-  return Object.assign({}, account.config, configOverrides);
-};
+function generateAwsConfig(account, configOverrides) {
+  const proxyConfig = {};
+  if ('HTTPS_PROXY' in process.env) {
+    proxyConfig.requestHandler = new NodeHttpHandler({
+      httpAgent: proxy(process.env.HTTPS_PROXY),
+      httpsAgent: proxy(process.env.HTTPS_PROXY)
+    });
+  }
+  return Object.assign({region: 'us-east-1'}, account.config, proxyConfig, configOverrides);
+}
 
-const generateAwsCloudFormationConfig = (account, configOverrides) => {
+function generateAwsCloudFormationConfig(account, configOverrides) {
   const config = {
     apiVersion: '2010-05-15',
-    maxRetries: 11,
-    retryDelayOptions: {
-      /*
-      | retryCount | sleep in s | maxRetries |
-      | ---------- | ---------- | ---------- |
-      | 0          | 1          | 1          |
-      | 1          | 2          | 2          |
-      | 2          | 4          | 3          |
-      | 3          | 8          | 4          |
-      | 4          | 16         | 5          |
-      | 5          | 32         | 6          |
-      | 6          | 64         | 7          |
-      | 7          | 128        | 8          |
-      | 8          | 256        | 9          |
-      | 9          | 512        | 10         |
-      | 10         | 1024       | 11         |
-      */
-      customBackoff: (retryCount) => Math.pow(2, retryCount) * 1000
-    }
+    maxAttempts: process.env.NODE_ENV === 'production' ? 12 : 1
   };
   return generateAwsConfig(account, Object.assign({}, config, configOverrides));
-};
+}
 
-const fetchTemplateSummary = (account, url) => {
-  const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(account, {}));
-  return cloudformation.getTemplateSummary({
+async function fetchTemplateSummary (account, url) {
+  const cloudformation = new CloudFormationClient(generateAwsCloudFormationConfig(account, {}));
+  return cloudformation.send(new GetTemplateSummaryCommand({
     TemplateURL: url
-  }).promise();
-};
+  }));
+}
 
-const detectTemplateDrift = async (account, stackRegion, stackName, templateId, templateVersion) => {
-  const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(account, {region: stackRegion}));
+async function detectTemplateDrift(account, stackRegion, stackName, templateId, templateVersion) {
+  const cloudformation = new CloudFormationClient(generateAwsCloudFormationConfig(account, {region: stackRegion}));
   if (templateVersion === undefined) {
     return undefined;
   } else {
-    const rawTemplate = await downloadS3File('widdix-aws-cf-templates-releases-eu-west-1', `v${templateVersion}/${templateId}.yaml`);
-    const liveTemplate = await cloudformation.getTemplate({
+    const rawTemplate = await downloadS3File(`v${templateVersion}/${templateId}.yaml`);
+    const liveTemplate = await cloudformation.send(new GetTemplateCommand({
       StackName: stackName
-    }).promise();
+    }));
     // CloudFormation replaces non-ascii chars with ? 
     const rawMd5 = md5(rawTemplate.replace(/[^\x00-\x7F]/g, '?').trim()); // eslint-disable-line no-control-regex 
     const liveMd5 = md5(liveTemplate.TemplateBody.trim());
     return rawMd5 !== liveMd5;
   }
-};
+}
 
 const downloadFileCache = new Map();
-const downloadS3File = async (bucket, key) => {
-  const url = `s3://${bucket}/${key}`;
-  if (downloadFileCache.has(url)) {
-    return downloadFileCache.get(url);
-  }
-  const s3 = new AWS.S3({apiVersion: '2006-03-01'});
-  const p = s3.makeUnauthenticatedRequest('getObject', {
-    Bucket: bucket,
-    Key: key
-  }).promise()
-    .then(data => data.Body.toString('utf8'));
-  downloadFileCache.set(url, p);
-  return p;
-};
-const downloadFile = (url) => { // includes caching
+
+async function downloadS3File(key) {
+  return downloadFile(`https://widdix-aws-cf-templates-releases-eu-west-1.s3.eu-west-1.amazonaws.com/${key}`);
+}
+
+async function downloadFile(url) { // includes caching
   if (downloadFileCache.has(url)) {
     return downloadFileCache.get(url);
   }
@@ -109,34 +104,34 @@ const downloadFile = (url) => { // includes caching
   });
   downloadFileCache.set(url, p);
   return p;
-};
+}
 
-const fetchLatestTemplateVersion = async (input) => {
+async function fetchLatestTemplateVersion(input) {
   if (input['--latest-version'] !== null) {
     return input['--latest-version'];
   }
   const body = await downloadFile('https://github.com/widdix/aws-cf-templates/releases.atom');
   return body.match(/<title>(v[0-9.]*)<\/title>/i)[1].replace('v', '');
-};
+}
 
-const extractTemplateIDFromStack = (stack) => {
+function extractTemplateIDFromStack(stack) {
   const templateId = stack.Outputs.find((output) => output.OutputKey === 'TemplateID').OutputValue;
   if (templateId === undefined) {
-    loglib.warning(`can not extract template id in ${stack.Region} for stack ${stack.StackName}`, stack);
+    warning(`can not extract template id in ${stack.Region} for stack ${stack.StackName}`, stack);
   }
   return templateId;
-};
+}
 
-const extractTemplateVersionFromStack = (templateId, stack) => {
+function extractTemplateVersionFromStack(templateId, stack) {
   const output = stack.Outputs.find((output) => output.OutputKey === 'TemplateVersion');
   if (output === undefined || output.OutputValue === '__VERSION__') {
-    loglib.warning(`can not extract template version in ${stack.Region} for stack ${stack.StackName} (${templateId})`, stack);
+    warning(`can not extract template version in ${stack.Region} for stack ${stack.StackName} (${templateId})`, stack);
     return undefined;
   }
   return output.OutputValue;
-};
+}
 
-const extractParentStacksFromParameters = (parameters) => {
+function extractParentStacksFromParameters(parameters) {
   return Object.keys(parameters)
     .filter(key => key.startsWith('Parent'))
     .filter(key => parameters[key] !== '')
@@ -144,37 +139,42 @@ const extractParentStacksFromParameters = (parameters) => {
       parameterName: key,
       stackName: parameters[key]
     }));
-};
+}
 
-const fetchStacks = (account, region) => {
-  const fetch = (previousStacks, nextToken) => {
-    const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(account, {region: region}));
-    return cloudformation.describeStacks({
-      NextToken: nextToken
-    }).promise()
-      .then((data) => {
-        const stacks = [...previousStacks, ...data.Stacks.map(stack => Object.assign({}, stack, {Region: region}))];
-        if (data.NextToken !== null && data.NextToken !== undefined) {
-          return fetch(stacks, data.NextToken);
-        } else {
-          return stacks;
-        }
-      });
-  };
-  return fetch([], null);
-};
+function initArrayIfUndefined(obj, name) {
+  if (!Array.isArray(obj[name])) {
+    obj[name] = [];
+  }
+  return obj;
+}
 
-const fetchRegions = (account, region) => {
+async function fetchStacks(account, region) {
+  const cloudformation = new CloudFormationClient(generateAwsCloudFormationConfig(account, {region: region}));
+  const stacks = [];
+  const paginator = paginateDescribeStacks({
+    client: cloudformation
+  }, {});
+  for await (const page of paginator) {
+    page.Stacks
+      .map(stack => Object.assign({}, stack, {Region: region}))
+      .map(stack => initArrayIfUndefined(stack, 'Parameters'))
+      .map(stack => initArrayIfUndefined(stack, 'Outputs'))
+      .forEach(stack => stacks.push(stack));
+  }
+  return stacks;
+}
+
+async function fetchRegions(account, region) {
   if (region !== null) {
     return Promise.resolve([region]);
   } else {
-    const ec2 = new AWS.EC2(generateAwsConfig(account, {apiVersion: '2016-11-15'}));
-    return ec2.describeRegions({}).promise()
-      .then(data => data.Regions.map(region => region.RegionName));
+    const ec2 = new EC2Client(generateAwsConfig(account, {apiVersion: '2016-11-15'}));
+    const data = await ec2.send(new DescribeRegionsCommand({}));
+    return data.Regions.map(region => region.RegionName);
   }
-};
+}
 
-const enrichStack = async (account, stack, input) => {
+async function enrichStack(account, stack, input) {
   const templateId = extractTemplateIDFromStack(stack);
   const templateVersion = extractTemplateVersionFromStack(templateId, stack);
   const parameters = stack.Parameters.reduce((acc, parameter) => {
@@ -189,16 +189,16 @@ const enrichStack = async (account, stack, input) => {
     try {
       return semver.gt(latestVersion, templateVersion);
     } catch (e) {
-      loglib.warning(`can not compare latest template version (v${latestVersion}) in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
+      warning(`can not compare latest template version (v${latestVersion}) in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
       return undefined;
     }    
   };
   const latestVersion = await fetchLatestTemplateVersion(input).catch(e => {
-    loglib.warning(`can not get latest template version in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
+    warning(`can not get latest template version in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
     return undefined;
   });
   const templateDrift = await detectTemplateDrift(account, stack.Region, stack.StackName, templateId, templateVersion).catch(e => {
-    loglib.warning(`can not get detect template drift in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
+    warning(`can not get detect template drift in ${stack.Region} for stack ${stack.StackName} (${templateId} v${templateVersion})`, e);
     return undefined;
   });
   return {
@@ -213,26 +213,26 @@ const enrichStack = async (account, stack, input) => {
     templateLatestVersion: latestVersion,
     templateUpdateAvailable: isUpdateAvailable(latestVersion, templateVersion)
   };
-};
+}
 
-const fetchAllStacks = (account, input) => {
+async function fetchAllStacks(account, input) {
+  const limit = pLimit(4);
   return fetchRegions(account, input['--region'])
     .then(regions => Promise.all(regions.map(region => fetchStacks(account, region))))
     .then(stackLists => {
       return Promise.all(
         stackLists
-          .reduce((acc, stacks) => [...acc, ...stacks], [])
+          .flat()
+          .filter(stack => !stack.StackName.startsWith('StackSet-'))
           .filter((stack) => {
             return stack.Outputs.some((output) => (output.OutputKey === 'TemplateID' && output.OutputValue.includes('/')));
           })
-          .map((stack) => {
-            return enrichStack(account, stack, input);
-          })
+          .map((stack) => limit(() => enrichStack(account, stack, input)))
       );
     });
-};
+}
 
-const yes = (stdconsole, stdin, question, alwaysYes) => {
+async function yes(stdconsole, stdin, question, alwaysYes) {
   if (alwaysYes === true) {
     return Promise.resolve();
   } else {
@@ -248,10 +248,10 @@ const yes = (stdconsole, stdin, question, alwaysYes) => {
       stdconsole.info(`${question} [y/N]`);
     });
   }
-};
+}
 
-const createChangeSet = async (stack) => {
-  const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(stack.account, {region: stack.region}));
+async function createChangeSet(stack) {
+  const cloudformation = new CloudFormationClient(generateAwsCloudFormationConfig(stack.account, {region: stack.region}));
   const changeSetName = `widdix-${crypto.randomBytes(16).toString('hex')}`;
   const templateURL = `https://s3-eu-west-1.amazonaws.com/widdix-aws-cf-templates-releases-eu-west-1/v${stack.templateLatestVersion}/${stack.templateId}.yaml`;
   const template = await fetchTemplateSummary(stack.account, templateURL);
@@ -262,11 +262,11 @@ const createChangeSet = async (stack) => {
     };
     return acc;
   }, {});
-  await cloudformation.createChangeSet({
+  await cloudformation.send(new CreateChangeSetCommand({
     ChangeSetName: changeSetName,
     StackName: stack.name,
     ChangeSetType: 'UPDATE',
-    Description: `widdix-v${require('./package.json').version}`,
+    Description: `widdix-v${version}`,
     Parameters: Object.keys(parameters).map(key => {
       const parameter = parameters[key];
       const ret ={
@@ -283,11 +283,17 @@ const createChangeSet = async (stack) => {
     }),
     TemplateURL: templateURL,
     Capabilities: ['CAPABILITY_IAM']
-  }).promise();
-  const data = await cloudformation.waitFor('changeSetCreateComplete', {
+  }));
+  await waitUntilChangeSetCreateComplete({
+    client: cloudformation
+  }, {
     StackName: stack.name,
     ChangeSetName: changeSetName
-  }).promise();
+  });
+  const data = await cloudformation.send(new DescribeChangeSetCommand({
+    StackName: stack.name,
+    ChangeSetName: changeSetName
+  }));
   return {
     name: data.ChangeSetName,
     changes: data.Changes.map(change => ({
@@ -299,26 +305,30 @@ const createChangeSet = async (stack) => {
       }
     }))
   };
-};
+}
 
-const timeout = async (ms) => new Promise(resolve => setTimeout(resolve, ms));
+async function timeout(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-const tailStackEvents = async (stack, changeSetType, eventCallback) => {
-  const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(stack.account, {region: stack.region}));
+async function tailStackEvents(stack, changeSetType, eventCallback) {
+  const cloudformation = new CloudFormationClient(generateAwsCloudFormationConfig(stack.account, {region: stack.region}));
   const publishedEventIds = new Set();
   const publishEvent = (event) => {
     publishedEventIds.add(event.EventId);
     eventCallback(event);
   };
-  const fetchAll = async (nextToken) => {
-    const data = await cloudformation.describeStackEvents({
-      StackName: stack.name,
-      NextToken: nextToken
-    }).promise();
-    if (data.NextToken !== undefined) {
-      return [...data.StackEvents, ...await fetchAll(data.NextToken)];
+  const fetchAll = async () => {
+    const allEvents = [];
+    const paginator = paginateDescribeStackEvents({
+      client: cloudformation
+    }, {
+      StackName: stack.name
+    });
+    for await (const page of paginator) {
+      page.StackEvents.forEach(event => allEvents.push(event));
     }
-    return data.StackEvents;
+    return allEvents;
   };
   const ts = Date.now() + (60 * 60 * 1000); // TODO make timeout of 1 hour configurable
   while(Date.now() < ts) {
@@ -346,18 +356,18 @@ const tailStackEvents = async (stack, changeSetType, eventCallback) => {
     }
   }
   throw Error(`stack ${changeSetType.toLowerCase()} timed out`);
-};
+}
 
-const executeChangeSet = async (stack, changeSet, eventCallback) => {
-  const cloudformation = new AWS.CloudFormation(generateAwsCloudFormationConfig(stack.account, {region: stack.region}));
-  await cloudformation.executeChangeSet({
+async function executeChangeSet(stack, changeSet, eventCallback) {
+  const cloudformation = new CloudFormationClient(generateAwsCloudFormationConfig(stack.account, {region: stack.region}));
+  await cloudformation.send(new ExecuteChangeSetCommand({
     ChangeSetName: changeSet.name,
     StackName: stack.name
-  }).promise();
+  }));
   await tailStackEvents(stack, 'UPDATE', eventCallback);
-};
+}
 
-const token = (stdconsole, stdin, question) => {
+async function token(stdconsole, stdin, question) {
   return new Promise((resolve, reject) => {
     stdin.once('data', b => {
       const answer = b.toString('utf8').replace(/[^0-9]/gi, '');
@@ -369,150 +379,58 @@ const token = (stdconsole, stdin, question) => {
     });
     stdconsole.error(question);
   });
-};
+}
 
-const sessionTokenCredentialsCache = new Map();
-const createSessionTokenCredentials = async (stdconsole, stdin, masterCredentials, serialNumber) => {
-  if (sessionTokenCredentialsCache.has(serialNumber)) {
-    return sessionTokenCredentialsCache.get(serialNumber);
-  } else {
-    const code = await token(stdconsole, stdin, `Please enter the MFA token for ${serialNumber}`);
-    const credentials = new AWS.TemporaryCredentials({
-      DurationSeconds: 60 * 60 * 12,
-      SerialNumber: serialNumber,
-      TokenCode: code
-    }, masterCredentials);
-    await credentials.getPromise(); // TODO could be cached on disk to avoid entering the mfa token every time
-    delete credentials.masterCredentials; // otherwise the aws sdk uses the original masterCredentaisl for assume role instead of the session token
-    sessionTokenCredentialsCache.set(serialNumber, credentials);
-    return credentials;
-  }
-};
-
-const enrichAwsAccount = async (account) => {
-  const iam = new AWS.IAM(generateAwsConfig(account, {apiVersion: '2010-05-08'}));
-  const sts = new AWS.STS(generateAwsConfig(account, {apiVersion: '2011-06-15'}));
+async function enrichAwsAccount(account) {
+  const iam = new IAMClient(generateAwsConfig(account, {apiVersion: '2010-05-08'}));
+  const sts = new STSClient(generateAwsConfig(account, {apiVersion: '2011-06-15'}));
   let accountId = null;
   let accountAlias = null;
   try {
-    const callerIdentityData = await sts.getCallerIdentity({}).promise();
+    const callerIdentityData = await sts.send(new GetCallerIdentityCommand({}));
     accountId = callerIdentityData.Account;
   } catch (e) {
-    loglib.warning(`can not enrich account ${account.label} of type ${account.type} with id`, e);
+    warning(`can not enrich account ${account.label} of type ${account.type} with id`, e);
   }
   try {
-    const accountAliasesData = await iam.listAccountAliases({}).promise();
+    const accountAliasesData = await iam.send(new ListAccountAliasesCommand({}));
     if (accountAliasesData.AccountAliases.length === 1) {
       accountAlias = accountAliasesData.AccountAliases[0];
     }
   } catch (e) {
-    loglib.warning(`can not enrich account ${account.label} of type ${account.type} with alias`, e);
+    warning(`can not enrich account ${account.label} of type ${account.type} with alias`, e);
   } 
   return Object.assign({}, account, {alias: accountAlias, id: accountId});
-};
+}
 
-const fetchAwsAccounts = async (stdconsole, stdin, input) => {
+async function fetchAwsAccounts(stdconsole, stdin, input) {
   if (input['--env'] === true) {
     return [await enrichAwsAccount({
       type: 'env',
       label: 'AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN',
       config: {
-        credentials: new AWS.EnvironmentCredentials('AWS')
+        credentials: fromEnv()
       }
     })];
   } else if (input['--profile'] !== null || input['--all-profiles'] === true) {
-    const profiles = await awscredslib.fetchProfiles();
+    const profiles = await fetchProfiles();
     const accounts = [];
     const keys = Object.keys(profiles);
     for (const key of keys) {
       if (input['--profile'] !== null && key !== input['--profile']) {
         continue;
-      }
-      const profile = profiles[key];
-      if ('aws_access_key_id' in profile && 'aws_secret_access_key' in profile) {
-        const params = {
-          accessKeyId: profile.aws_access_key_id,
-          secretAccessKey: profile.aws_secret_access_key
-        };
-        if ('aws_session_token' in profile) {
-          params.sessionToken = profile.aws_session_token;
+      }      
+      const credentials = fromIni({
+        profile: key,
+        mfaCodeProvider: async (mfaSerial) => token(stdconsole, stdin, `Please enter the MFA token for ${mfaSerial}`)
+      });
+      accounts.push(await enrichAwsAccount({
+        type: 'profile',
+        label: `profile ${key}`,
+        config: {
+          credentials
         }
-        const credentials = new AWS.Credentials(params);
-        accounts.push(await enrichAwsAccount({
-          type: 'access-key',
-          label: `profile ${key}`,
-          config: {
-            credentials
-          }
-        }));
-      } else if ('role_arn' in profile && 'source_profile' in profile && 'mfa_serial' in profile) {
-        const sourceProfile = profiles[profile.source_profile];
-        const masterParams = {
-          accessKeyId: sourceProfile.aws_access_key_id,
-          secretAccessKey: sourceProfile.aws_secret_access_key
-        };
-        if ('aws_session_token' in sourceProfile) {
-          masterParams.sessionToken = sourceProfile.aws_session_token;
-        }
-        const masterCredentials = new AWS.Credentials(masterParams);
-        try {
-          const sessionTokenCredentials = await createSessionTokenCredentials(stdconsole, stdin, masterCredentials, profile.mfa_serial);
-          const params = {
-            RoleArn: profile.role_arn,
-            RoleSessionName: `widdix-v${require('./package.json').version}`,
-            DurationSeconds: 15 * 60 // TODO make timeout of 15 minutes configurable
-          };
-          if ('external_id' in profile) {
-            params.ExternalId = profile.external_id;
-          }
-          const credentials = new AWS.TemporaryCredentials(params, sessionTokenCredentials);
-          try {
-            await credentials.getPromise();
-            accounts.push(await enrichAwsAccount({
-              type: 'role-mfa',
-              label: `profile ${key}`,
-              config: {
-                credentials
-              }
-            }));
-          } catch (e) {
-            loglib.warning(`can not assume role for account profile ${key} of type role-mfa`, e);
-          }
-        } catch (e) {
-          loglib.warning(`can not get session token for account profile ${key} of type role-mfa`, e);
-        }
-      } else if ('role_arn' in profile && 'source_profile' in profile) {
-        const sourceProfile = profiles[profile.source_profile];
-        const masterParams = {
-          accessKeyId: sourceProfile.aws_access_key_id,
-          secretAccessKey: sourceProfile.aws_secret_access_key
-        };
-        if ('aws_session_token' in sourceProfile) {
-          masterParams.sessionToken = sourceProfile.aws_session_token;
-        }
-        const masterCredentials = new AWS.Credentials(masterParams);
-        const params = {
-          RoleArn: profile.role_arn,
-          RoleSessionName: `widdix-v${require('./package.json').version}`,
-          DurationSeconds: 15 * 60 // TODO make timeout of 15 minutes configurable
-        };
-        if ('external_id' in profile) {
-          params.ExternalId = profile.external_id;
-        }
-        const credentials = new AWS.TemporaryCredentials(params, masterCredentials);
-        try {
-          await credentials.getPromise();
-          accounts.push(await enrichAwsAccount({
-            type: 'role',
-            label: `profile ${key}`,
-            config: {
-              credentials
-            }
-          }));
-        } catch (e) {
-          loglib.warning(`can not assume role for account profile ${key} of type role`, e);
-        }
-      }
+      }));
     }
     if (accounts.length === 0) {
       if (input['--profile'] !== null) {
@@ -529,14 +447,13 @@ const fetchAwsAccounts = async (stdconsole, stdin, input) => {
       config: {}
     })];
   }
-};
+}
 
-module.exports.clearCache = () => {
+export function clearCache() {
   downloadFileCache.clear();
-  sessionTokenCredentialsCache.clear();
-};
+}
 
-const displayAccount = (account) => {
+function displayAccount(account) {
   if (account.alias !== null) {
     return account.alias;
   }
@@ -544,38 +461,21 @@ const displayAccount = (account) => {
     return account.id;
   }
   return `${account.label} of type ${account.type}`;
-};
+}
 
-module.exports.run = async (argv, stdout, stderr, stdin) => {
-  const cli = fs.readFileSync(path.join(__dirname, 'cli.txt'), {encoding: 'utf8'});
+export async function run(argv, stdout, stderr, stdin) {
+  const cli = fs.readFileSync(new URL('./cli.txt', import.meta.url), {encoding: 'utf8'});
   const stdconsole = new console.Console(stdout, stderr);
   const input = docopt.docopt(cli, {
-    version: require('./package.json').version,
+    version,
     argv: argv
   });
 
   if (input['--debug'] === true) {
-    loglib.setLevel('debug');
+    setLevel('debug');
   } else {
-    loglib.setLevel('info');
+    setLevel('info');
   }
-
-  AWS.config.update({
-    logger: {
-      log: (message, data) => loglib.debug(message, data)
-    }
-  });
-
-  if ('HTTPS_PROXY' in process.env) {
-    loglib.debug(`using https proxy ${process.env.HTTPS_PROXY}`);
-    AWS.config.update({
-      httpOptions: {agent: proxy(process.env.HTTPS_PROXY)}
-    });
-  }
-
-  AWS.config.update({
-    region: 'us-east-1'
-  });
 
   if (input.list === true) {
     const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
@@ -595,16 +495,16 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
         });
         rows.push(...accountRows);
       } catch (err) {
-        loglib.error(`can not access account ${account.label} of type ${account.type}`, err);
+        error(`can not access account ${account.label} of type ${account.type}`, err);
       }
     }
-    tablelib.print(stdconsole, stdout.columns, ['Stack Account', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Template Drift'], rows);
+    tprint(stdconsole, stdout.columns, ['Stack Account', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Template Drift'], rows);
   } else if (input.graph === true) {
     const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
     const intelligentLabelShortening = (label) => {
       return truncate(label, 12, 12, '...');
     };
-    const groot = graphlib.create('root', `widdix-v${require('./package.json').version}`);
+    const groot = gcreate('root', `widdix-v${version}`);
     for (const account of accounts) {
       try {
         const stacks = await fetchAllStacks(account, input);
@@ -627,7 +527,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
           });
         });
       } catch (err) {
-        loglib.error(`can not access account ${account.label} of type ${account.type}`, err);
+        error(`can not access account ${account.label} of type ${account.type}`, err);
       }
     }
     stdconsole.log(groot.toDOT());
@@ -648,7 +548,7 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
         return stacks;
       } else {
         const accounts = await fetchAwsAccounts(stdconsole, stdin, input);
-        const g = graphlib.create('root', `widdix-v${require('./package.json').version}`);
+        const g = gcreate('root', `widdix-v${version}`);
         for (const account of accounts) {
           const stacksRandomOrder = await fetchAllStacks(account, input);
           stacksRandomOrder.forEach(stack => {
@@ -704,9 +604,9 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
         rows.push(row);
       });
     });
-    tablelib.print(stdconsole, stdout.columns, ['Stack Account', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Resource Type', 'Resource Id', 'Resource Action'], rows);
+    tprint(stdconsole, stdout.columns, ['Stack Account', 'Stack Region', 'Stack Name', 'Template ID', 'Template Version', 'Resource Type', 'Resource Id', 'Resource Action'], rows);
     await yes(stdconsole, stdin, 'Apply changes?', input['--yes']);
-    const eventTable = tablelib.create(['Time', 'Status', 'Type', 'Logical ID', 'Status Reason'], []);
+    const eventTable = tcreate(['Time', 'Status', 'Type', 'Logical ID', 'Status Reason'], []);
     eventTable.printHeader(stdconsole, stdout.columns);
     for (const {stack, changeSet} of stacksAndChangeSets) {
       await executeChangeSet(stack, changeSet, (event) => {
@@ -715,5 +615,4 @@ module.exports.run = async (argv, stdout, stderr, stdin) => {
     }
     eventTable.printFooter(stdconsole, stdout.columns);
   }
-};
-
+}
