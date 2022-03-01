@@ -16,7 +16,7 @@
     "p-limit": "4.0.0",
     "proxy-agent": "5.0.0",
     "request": "2.88.2",
-    "requestretry": "6.0.0",
+    "requestretry": "7.0.0",
     "semver": "7.3.5",
     "serialize-error": "9.0.0",
     "simple-node-logger": "21.8.12",
