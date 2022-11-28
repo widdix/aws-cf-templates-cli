@@ -282,7 +282,7 @@ async function createChangeSet(stack) {
       return ret;
     }),
     TemplateURL: templateURL,
-    Capabilities: ['CAPABILITY_IAM']
+    Capabilities: ['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM']
   }));
   await waitUntilChangeSetCreateComplete({
     client: cloudformation

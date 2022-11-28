@@ -338,7 +338,7 @@ describe('cli', () => {
             Version: '2010-05-15',
             Capabilities: {
               // eslint-disable-next-line no-sparse-arrays
-              member: [, 'CAPABILITY_IAM']
+              member: [, 'CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM']
             },
             ChangeSetName: /.*/,
             ChangeSetType: 'UPDATE',
