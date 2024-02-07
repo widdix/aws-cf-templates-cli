@@ -4,7 +4,7 @@ import console from 'console';
 import requestretry from 'requestretry';
 import docopt from 'docopt';
 import semver from 'semver';
-import proxy from 'proxy-agent';
+import { HttpsProxyAgent } from 'hpagent';
 import truncate from 'truncate-middle';
 import md5 from 'md5';
 import pLimit from 'p-limit';
@@ -23,7 +23,7 @@ import {
 import { IAMClient, ListAccountAliasesCommand } from '@aws-sdk/client-iam';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import { fromIni, fromEnv } from '@aws-sdk/credential-providers';
-import { NodeHttpHandler } from '@aws-sdk/node-http-handler'; 
+import { NodeHttpHandler } from '@smithy/node-http-handler'; 
 
 import { create as gcreate } from './lib/graph.js';
 import { create as tcreate, print as tprint } from './lib/table.js';
@@ -36,8 +36,8 @@ function generateAwsConfig(account, configOverrides) {
   const proxyConfig = {};
   if ('HTTPS_PROXY' in process.env) {
     proxyConfig.requestHandler = new NodeHttpHandler({
-      httpAgent: proxy(process.env.HTTPS_PROXY),
-      httpsAgent: proxy(process.env.HTTPS_PROXY)
+      httpAgent: new HttpsProxyAgent({ proxy: process.env.HTTPS_PROXY }),
+      httpsAgent: new HttpsProxyAgent({ proxy: process.env.HTTPS_PROXY })
     });
   }
   return Object.assign({region: 'us-east-1'}, account.config, proxyConfig, configOverrides);
