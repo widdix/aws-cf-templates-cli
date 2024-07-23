@@ -5,7 +5,7 @@ defaults:
     shell: bash
 jobs:
   build:
-    runs-on: ['hyperenv', 'medium']
+    runs-on: ['hyperenv', 'medium-eu-west-1']
     strategy:
       matrix:
         node: ['18', '20']
